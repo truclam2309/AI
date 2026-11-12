@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from . import state
 from .catalog import get_dishes, load_model_metadata, read_catalog, sync_catalog
@@ -24,6 +25,9 @@ app = FastAPI(
     description="Cá nhân hóa dinh dưỡng và lưu lịch sử thực đơn.",
     lifespan=lifespan,
 )
+image_directory = settings.data_dir / "hinh-anh-lam-net"
+if image_directory.is_dir():
+    app.mount("/images", StaticFiles(directory=image_directory), name="dish-images")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),

@@ -33,8 +33,9 @@ except ImportError:
 class Settings:
     secret_key: str = os.getenv("NUTRIAI_SECRET_KEY", "")
     database_url: str = os.getenv("NUTRIAI_DATABASE_URL", "sqlite:///./nutriai.db")
-    dataset_path: Path = Path(os.getenv("NUTRIAI_DATASET_PATH", str(Path(__file__).resolve().parents[2] / "bo-du-lieu-mon-an.xlsx"))).resolve()
-    model_path: Path = Path(os.getenv("NUTRIAI_MODEL_PATH", str(Path(__file__).resolve().parents[2] / "mo_hinh_dinh_duong.pkl"))).resolve()
+    data_dir: Path = Path(os.getenv("NUTRIAI_DATA_DIR", str(Path(__file__).resolve().parents[1] / "data"))).resolve()
+    dataset_path: Path = Path(os.getenv("NUTRIAI_DATASET_PATH", str(data_dir / "bo-du-lieu-mon-an.xlsx"))).resolve()
+    model_path: Path = Path(os.getenv("NUTRIAI_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "models" / "obesity_status_model.pkl"))).resolve()
     token_ttl_seconds: int = int(os.getenv("NUTRIAI_TOKEN_TTL_SECONDS", "86400"))
     timezone_name: str = os.getenv("NUTRIAI_TIMEZONE", "Asia/Ho_Chi_Minh")
     cors_origins: tuple[str, ...] = tuple(

@@ -57,6 +57,8 @@ def read_catalog(path: Path) -> list[dict]:
             "image_url": (
                 str(row["image_url"]).strip()
                 if "image_url" in df.columns and pd.notna(row["image_url"]) and str(row["image_url"]).strip()
+                else f"/images/{str(row['dish_id']).strip()}.jpg"
+                if (settings.data_dir / "hinh-anh-lam-net" / f"{str(row['dish_id']).strip()}.jpg").is_file()
                 else None
             ),
             "image_file": (

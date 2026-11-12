@@ -11,8 +11,6 @@ py -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 # NUTRIAI_SECRET_KEY có thể được đặt trong backend\.env hoặc biến môi trường.
-$env:NUTRIAI_DATASET_PATH = "D:\Nhóm 3\bo-du-lieu-mon-an.xlsx"
-$env:NUTRIAI_MODEL_PATH = "D:\Nhóm 3\mo_hinh_dinh_duong.pkl"
 # Tùy chọn: timezone mặc định Asia/Ho_Chi_Minh; giới hạn calo chỉ phát cảnh báo, không ép số liệu.
 $env:NUTRIAI_TIMEZONE = "Asia/Ho_Chi_Minh"
 $env:NUTRIAI_CALORIE_MINIMUM = "1200"
@@ -23,7 +21,7 @@ uvicorn app.main:app --reload
 Huấn luyện mô hình thể trạng bằng CSV gốc ở thư mục trên backend:
 
 ```powershell
-python train_obesity_model.py --data "..\bộ dữ liệu về thể trạng.csv"
+python train_obesity_model.py
 ```
 
 Script loại các dòng trùng hoàn toàn khỏi tập huấn luyện, chia train/test phân tầng 80/20, lưu pipeline ở `models/obesity_status_model.pkl`, metric ở `training_metrics.json` và confusion matrix ở `confusion_matrix.png`. CSV thực tế có 14 cột tổng cộng: 13 input và `Mức cân nặng`; script dùng đúng cột thực tế, không tự thêm input thiếu trong danh sách mô tả. Sau khi train, có thể import `predict_body_status` từ `train_obesity_model.py`; hàm kiểm tra đủ trường và miền giá trị, trả xác suất từng lớp cùng BMI tham khảo. Endpoint `POST /api/v1/nutrition/body-status` gọi hàm này; frontend gửi đủ thông tin cơ thể và thói quen. Nhãn ML và gợi ý mục tiêu chỉ là tham khảo; Nutrition Engine vẫn là phần tính calo và đa lượng riêng.
@@ -85,3 +83,5 @@ python -m pytest -q
 ```
 
 Các unit test dùng SQLite tạm và dữ liệu món ăn giả, không cần workbook thật.
+
+

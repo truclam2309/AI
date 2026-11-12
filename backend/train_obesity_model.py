@@ -37,7 +37,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_DATA = SCRIPT_DIR.parent / "bộ dữ liệu về thể trạng.csv"
+DEFAULT_DATA = SCRIPT_DIR / "data" / "bộ dữ liệu về thể trạng.csv"
 DEFAULT_MODEL = SCRIPT_DIR / "models" / "obesity_status_model.pkl"
 DEFAULT_METRICS = SCRIPT_DIR / "training_metrics.json"
 DEFAULT_MATRIX = SCRIPT_DIR / "confusion_matrix.png"
