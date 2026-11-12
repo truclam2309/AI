@@ -11,6 +11,7 @@ py -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 # NUTRIAI_SECRET_KEY có thể được đặt trong backend\.env hoặc biến môi trường.
+# Dataset mặc định: backend/data/bo-du-lieu-mon-an.xlsx và backend/data/bộ dữ liệu về thể trạng.csv.
 # Tùy chọn: timezone mặc định Asia/Ho_Chi_Minh; giới hạn calo chỉ phát cảnh báo, không ép số liệu.
 $env:NUTRIAI_TIMEZONE = "Asia/Ho_Chi_Minh"
 $env:NUTRIAI_CALORIE_MINIMUM = "1200"

@@ -25,7 +25,7 @@ const env = (
  * Tự động chuẩn hóa để tránh lặp đường dẫn.
  */
 const API_BASE_URL = (
-  env?.VITE_API_URL ?? 'http://127.0.0.1:8000'
+  env?.VITE_API_URL ?? 'https://ai-9kpu.onrender.com'
 ).replace(/\/+$/, '');
 
 export const API_URL = API_BASE_URL.endsWith('/api/v1')

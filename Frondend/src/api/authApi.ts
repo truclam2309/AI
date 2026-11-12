@@ -4,13 +4,13 @@ import { request } from './client';
 
 export const authApi = {
   login: (payload: LoginRequest) =>
-    request<TokenResponse>('POST', '/api/v1/auth/login', {
+    request<TokenResponse>('POST', '/auth/login', {
       body: payload,
       auth: false
     }),
 
   register: (payload: RegisterRequest) =>
-    request<RegisterResponse>('POST', '/api/v1/auth/register', {
+    request<RegisterResponse>('POST', '/auth/register', {
       body: payload,
       auth: false,
       timeoutMs: 60000

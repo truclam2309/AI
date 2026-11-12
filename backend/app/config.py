@@ -39,7 +39,10 @@ class Settings:
     token_ttl_seconds: int = int(os.getenv("NUTRIAI_TOKEN_TTL_SECONDS", "86400"))
     timezone_name: str = os.getenv("NUTRIAI_TIMEZONE", "Asia/Ho_Chi_Minh")
     cors_origins: tuple[str, ...] = tuple(
-        origin.strip() for origin in os.getenv("NUTRIAI_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+        origin.strip() for origin in os.getenv(
+            "NUTRIAI_CORS_ORIGINS",
+            "http://localhost:5173,http://localhost:3000,https://ai-vdyx-bug5a3aud-mis-3032.vercel.app",
+        ).split(",")
         if origin.strip()
     )
     calorie_minimum: float = float(os.getenv("NUTRIAI_CALORIE_MINIMUM", "1200"))
