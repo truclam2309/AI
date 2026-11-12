@@ -1,0 +1,4 @@
+Total images scanned : 85012
+Unique filenames     : 85012
+Duplicate filenames  : 0
+
