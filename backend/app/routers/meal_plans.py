@@ -66,6 +66,7 @@ def select_dish_for_meal(
             payload.plan_date,
             override_dish=dish,
             override_meal_type=payload.meal_type,
+            side_meals=1 if payload.meal_type == "snack" else 0,
         )
     return {"data": result, "created": True}
 

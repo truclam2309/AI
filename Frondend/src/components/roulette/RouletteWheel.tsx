@@ -59,6 +59,7 @@ export function RouletteWheel({
             return <div key={dish.dish_id} className="absolute z-[1] flex w-[22%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 text-center" style={{left: `${x}%`, top: `${y}%`, transform: `translate(-50%, -50%) rotate(${-rotation}deg)`}}>
               <span className="h-11 w-11 rounded-full border-[3px] border-white bg-white p-0.5 shadow-md sm:h-[4.25rem] sm:w-[4.25rem] sm:border-4"><WheelDishImage dish={dish} /></span>
               <span className="max-w-full rounded-full bg-[#fffaf0]/90 px-1.5 py-0.5 text-[8px] font-bold leading-tight text-[#55372b] shadow-sm sm:text-[10px]">{title(dish.name).slice(0, 18)}</span>
+              {dish.goal_fit_percent != null && <span className="rounded-full bg-[#28623c] px-1.5 py-0.5 text-[8px] font-black leading-tight text-white shadow-sm sm:text-[10px]">{Math.round(dish.goal_fit_percent)}%</span>}
             </div>;
           })}
         </div>

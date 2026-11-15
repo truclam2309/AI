@@ -37,7 +37,9 @@ export interface IngredientSearchResponse {
   warnings: string[];
 }
 
-export interface CatalogDish extends Omit<IngredientRecommendation, 'matched_ingredients' | 'missing_ingredients' | 'matched_count' | 'required_count' | 'ingredient_match_ratio' | 'similarity_score' | 'nutrition_label_note'> {}
+export type CatalogDish = Omit<IngredientRecommendation, 'matched_ingredients' | 'missing_ingredients' | 'matched_count' | 'required_count' | 'ingredient_match_ratio' | 'similarity_score' | 'nutrition_label_note'> & {
+  goal_fit_percent: number | null;
+};
 
 export interface CatalogDishResponse {
   total: number;

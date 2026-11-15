@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import date, timedelta
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -143,15 +144,12 @@ def generate_meals(
                     dish.id: (1.0 if int(prediction) == expected else 0.0)
                     for dish, prediction in zip(eligible, predictions)
                 }
-        except Exception:
-            # Never reintroduce filtered dishes if model inference is unavailable.
-            model_scores = {}
-    if not model_scores:
-        warnings.append("Random Forest chưa sẵn sàng; các món đạt điều kiện được xếp theo độ khớp dinh dưỡng.")
+        except Exception as exc:
+            raise HTTPException(503, f"Không thể dự đoán bằng Random Forest: {type(exc).__name__}.") from exc
+    if len(model_scores) != len(eligible):
+        raise HTTPException(503, "Random Forest không trả đủ điểm cho các món đủ điều kiện.")
 
     selected: list[dict] = []
-    selected_ids: set[str] = set()
-    selected_groups: set[str] = set()
     main_share = 1.0 if side_meals == 0 else 0.85
     main_split_total = sum(split[MEALS[index % len(MEALS)]] for index in range(main_meals))
     slots: list[tuple[str, str, float]] = []
@@ -161,8 +159,8 @@ def generate_meals(
         slots.append((meal, "main", main_share * split[meal] / main_split_total / meal_occurrences))
     for _ in range(side_meals):
         slots.append(("snack", "side", (1.0 - main_share) / side_meals if side_meals else 0.0))
+    candidate_slots: list[tuple[str, str, float, list[Dish]]] = []
     for meal, course_type, slot_share in slots:
-        meal_budget = target_calories * slot_share
         if course_type == "side":
             allowed_categories = {"ăn vặt", "nước uống", "sữa"}
         elif meal == "breakfast":
@@ -173,80 +171,102 @@ def generate_meals(
             dish for dish in eligible
             if (dish.meal_category or "").strip().casefold() in allowed_categories
         ]
-        available_categorized = [dish for dish in categorized if dish.id not in selected_ids]
-        if available_categorized:
+        if categorized:
             slot_candidates = categorized
         else:
-            # Old catalogs and small filtered pools may not contain a matching
-            # category. Preserve plan generation, but make the fallback visible.
+            # Keep older datasets usable, but surface that the category label
+            # could not be honored for this slot.
             slot_candidates = eligible
             warnings.append(
                 f"Không còn món thuộc nhóm phù hợp cho {'bữa phụ' if course_type == 'side' else 'bữa ' + meal}; đã mở rộng sang các nhóm món khác."
             )
-        ranking = []
+        candidate_slots.append((meal, course_type, slot_share, slot_candidates))
+
+    if any(not slot_candidates for _, _, _, slot_candidates in candidate_slots):
+        raise ValueError("Không có món đủ điều kiện cho một hoặc nhiều bữa.")
+
+    # Beam search chooses the whole day together. Every partial plan is rejected
+    # as soon as its calories exceed the daily target; ranking then balances
+    # calorie proximity, all three macro targets, and the selected-goal RF score.
+    beam_width = 120
+    candidate_limit = 80
+    beam: list[list[Dish]] = [[]]
+    for slot_index, (meal, _course_type, slot_share, slot_candidates) in enumerate(candidate_slots):
+        meal_budget = target_calories * slot_share
+        macro_targets = {
+            key: (target_macros or {}).get(key, 0.0) * slot_share
+            for key in ("protein", "carb", "fat")
+        }
+        local_ranked = []
         for dish in slot_candidates:
-            if dish.id in selected_ids:
-                continue
-            # Use the catalog serving and its total nutrition from the workbook.
-            grams = dish.serving_g
             nutrition = _nutrition(dish)
-            calorie_score = max(0.0, 1 - abs(nutrition["calories"] - meal_budget) / max(meal_budget, 1))
-            if target_macros:
-                macro_scores = [
-                    max(0.0, 1 - abs(nutrition[key] - target_macros[key] * slot_share) / max(target_macros[key] * slot_share, 1))
-                    for key in ("protein", "carb", "fat")
-                ]
-                macro_score = sum(macro_scores) / len(macro_scores)
-            else:
-                macro_score = 0.5
-            if profile.goal == "gain_muscle":
-                goal_score = min(1.0, nutrition["protein"] / max(meal_budget * .06, 1))
-            elif profile.goal == "lose_weight":
-                goal_score = max(0.0, min(1.0, 1 - (dish.calories_per_100g / 400)))
-            elif profile.goal == "gain_weight":
-                goal_score = min(1.0, nutrition["calories"] / max(meal_budget, 1))
-            else:
-                goal_score = 1.0 - min(1.0, abs(nutrition["calories"] - meal_budget) / max(meal_budget, 1))
-            dish_name = dish.name.casefold()
-            preference_score = 1.0 if any(term in dish_name for term in favorites) else 0.5
-            variety_score = 0.0 if dish.food_group in selected_groups else 1.0
-            repeat = _repeat_penalty(dish.id, counts)
-            weights = settings.score_weights
-            secondary_score = (
-                weights["calorie"] * calorie_score
-                + weights["goal"] * goal_score
-                + weights["preference"] * preference_score
-                + weights["variety"] * variety_score
-                + weights["macro"] * macro_score
-                - settings.repeat_penalties["same_day"] * repeat
-            )
-            model_score = model_scores.get(dish.id)
-            ranking.append((model_score, secondary_score, -repeat, dish, grams, nutrition, repeat, macro_score))
-        if not ranking:
-            warnings.append("Không đủ món duy nhất cho từng bữa; dữ liệu lựa chọn bị hạn chế.")
-            break
-        # Highest goal-class probability wins. Nutrition fit, preference,
-        # variety, and history only break ties or rank when the model is off.
-        ranking.sort(key=lambda x: (
-            x[0] if x[0] is not None else -1.0,
-            x[1], x[2], x[3].id,
-        ), reverse=True)
-        model_score, secondary_score, _, dish, grams, nutrition, repeat, macro_score = ranking[0]
-        selected_ids.add(dish.id)
-        selected_groups.add(dish.food_group or "")
-        reason = f"Khẩu phần {grams:.0f} g; dinh dưỡng theo workbook ({nutrition['calories']:.0f} kcal). Độ khớp ngân sách bữa {meal_budget:.0f} kcal là {macro_score:.0%}."
-        if model_score is not None:
-            reason = f"Điểm Random Forest cho mục tiêu {GOAL_LABEL_BY_PROFILE.get(profile.goal, profile.goal)}: {model_score:.0%}. " + reason
-        else:
-            reason = f"Điểm xếp hạng dinh dưỡng: {secondary_score:.3f}. " + reason
+            macro_fit = sum(
+                max(0.0, 1 - abs(nutrition[key] - macro_targets[key]) / max(macro_targets[key], 1.0))
+                for key in macro_targets
+            ) / 3 if target_macros else 0.5
+            calorie_fit = max(0.0, 1 - abs(nutrition["calories"] - meal_budget) / max(meal_budget, 1.0))
+            local_ranked.append((
+                0.50 * macro_fit + 0.25 * calorie_fit + 0.25 * model_scores[dish.id],
+                dish,
+            ))
+        local_ranked.sort(key=lambda pair: (pair[0], pair[1].id), reverse=True)
+        candidate_pool = [dish for _, dish in local_ranked[:candidate_limit]]
+        expanded: list[list[Dish]] = []
+        for partial in beam:
+            used = {dish.id for dish in partial}
+            current_calories = sum(dish.calories_per_serving for dish in partial)
+            for dish in candidate_pool:
+                if dish.id in used or current_calories + dish.calories_per_serving > target_calories + 1e-9:
+                    continue
+                expanded.append([*partial, dish])
+        if not expanded:
+            raise ValueError("Không tìm thấy tổ hợp món đủ số bữa mà tổng calo không vượt mục tiêu.")
+
+        progress = sum(slot[2] for slot in candidate_slots[:slot_index + 1])
+        expected_calories = target_calories * progress
+        expected_macros = {
+            key: (target_macros or {}).get(key, 0.0) * progress
+            for key in ("protein", "carb", "fat")
+        }
+        def partial_score(plan: list[Dish]) -> float:
+            totals = {
+                "calories": sum(d.calories_per_serving for d in plan),
+                "protein": sum(d.protein_per_serving for d in plan),
+                "carb": sum(d.carb_per_serving for d in plan),
+                "fat": sum(d.fat_per_serving for d in plan),
+            }
+            calorie_fit = max(0.0, 1 - abs(totals["calories"] - expected_calories) / max(expected_calories, 1.0))
+            macro_fit = sum(
+                max(0.0, 1 - abs(totals[key] - expected_macros[key]) / max(expected_macros[key], 1.0))
+                for key in expected_macros
+            ) / 3 if target_macros else 0.5
+            rf_fit = sum(model_scores[d.id] for d in plan) / len(plan)
+            variety_fit = len({d.food_group for d in plan}) / len(plan)
+            repeat_penalty = sum(_repeat_penalty(d.id, counts) for d in plan) / len(plan)
+            return 0.45 * macro_fit + 0.25 * calorie_fit + 0.25 * rf_fit + 0.05 * (variety_fit - repeat_penalty)
+        beam = sorted(expanded, key=lambda plan: (partial_score(plan), tuple(d.id for d in plan)), reverse=True)[:beam_width]
+
+    best = max(beam, key=partial_score)
+    for index, (meal, course_type, slot_share, _) in enumerate(candidate_slots):
+        dish = best[index]
+        nutrition = _nutrition(dish)
+        model_score = model_scores[dish.id]
+        repeat = _repeat_penalty(dish.id, counts)
+        meal_budget = target_calories * slot_share
+        reason = (
+            f"Random Forest: {model_score:.0%} phù hợp mục tiêu {GOAL_LABEL_BY_PROFILE.get(profile.goal, profile.goal)}. "
+            f"Khẩu phần {dish.serving_g:.0f} g; {nutrition['calories']:.0f} kcal. "
+            f"Ngân sách bữa tham chiếu {meal_budget:.0f} kcal."
+        )
         if repeat:
-            reason += f" Món có lịch sử gần đây (mức phạt {repeat:.2f}); tập món khả dụng có giới hạn."
+            reason += f" Món có lịch sử gần đây (mức phạt {repeat:.2f})."
         if any(term in dish.name.casefold() for term in favorites):
             reason += " Khớp món yêu thích."
         selected.append({
             "dish_id": dish.id, "dish_name": dish.name, "food_group": dish.food_group,
             "ingredients": dish.ingredients, "instructions": dish.instructions,
-            "image_url": dish.image_url, "meal_type": meal, "course_type": course_type, "serving_grams": round(grams, 1),
+            "image_url": dish.image_url, "meal_type": meal, "course_type": course_type,
+            "serving_grams": round(dish.serving_g, 1),
             **{key: round(value, 1) for key, value in nutrition.items()},
             "position": len(selected), "recommendation_reason": reason,
         })

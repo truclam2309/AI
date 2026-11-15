@@ -129,9 +129,6 @@ export function Recommendations() {
       <header>
         <p className="text-sm text-muted">Tìm kiếm theo nguyên liệu</p>
         <h1 className="mt-1 text-3xl font-semibold">Nấu món gì hôm nay?</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-          Nhập nguyên liệu bạn đang có. NutriAI so khớp với công thức trong catalog và cho biết phần đã có, phần còn thiếu.
-        </p>
       </header>
 
       <form onSubmit={search} className="card space-y-5 p-5 sm:p-7">

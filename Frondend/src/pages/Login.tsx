@@ -34,7 +34,7 @@ export function Login() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold">Đăng nhập NutriAI</h1>
+      <h1 className="text-2xl font-semibold">Đăng nhập MyFit</h1>
       <p className="mt-1 text-sm text-muted">Tiếp tục theo dõi hồ sơ và thực đơn của bạn.</p>
       {message && <p role="alert" className="mt-5 rounded-lg bg-accent-soft px-3 py-2.5 text-sm text-accent">{message}</p>}
       <form onSubmit={submit} className="mt-6 space-y-4">

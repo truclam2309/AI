@@ -71,7 +71,7 @@ class GenerateInput(BaseModel):
 
 class SelectDishInput(BaseModel):
     plan_date: date
-    meal_type: Literal["breakfast", "lunch", "dinner"]
+    meal_type: Literal["breakfast", "lunch", "dinner", "snack"]
     dish_id: str = Field(min_length=1, max_length=80)
 
 
@@ -137,9 +137,10 @@ class CatalogDish(BaseModel):
     fat: float | None
     serving_grams: float | None
     nutrition_label: str | None
+    goal_fit_percent: float | None = None
 
     @classmethod
-    def from_dish(cls, dish):
+    def from_dish(cls, dish, goal_fit_percent: float | None = None):
         raw = dish.ingredients or ""
         ingredients = [part.strip() for part in raw.replace("\n", "|").replace(";", "|").split("|") if part.strip()]
         return cls(
@@ -148,6 +149,7 @@ class CatalogDish(BaseModel):
             calories=dish.calories_per_serving, protein=dish.protein_per_serving,
             carb=dish.carb_per_serving, fat=dish.fat_per_serving,
             serving_grams=dish.serving_g, nutrition_label=dish.nutrition_label,
+            goal_fit_percent=goal_fit_percent,
         )
 
 

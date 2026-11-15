@@ -177,7 +177,6 @@ export function MealPlan() {
         <div>
           <p className="text-sm text-muted">Kế hoạch theo ngày</p>
           <h1 className="mt-1 text-3xl font-semibold">Thực đơn của bạn</h1>
-          <p className="mt-2 text-sm text-muted">Chọn ngày để xem lịch sử hoặc tạo kế hoạch mới. Lịch sử món ăn được lưu và dùng để ưu tiên thực đơn đa dạng trong 30 ngày gần đây.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="relative">
@@ -287,13 +286,11 @@ export function MealPlan() {
                 {selectedAdditions.length > 0 && <p className="mt-4 rounded-xl bg-brand-soft/50 p-3 text-sm text-brand">Đã chọn thêm {selectedAdditions.map((item) => `${item.name} ${item.grams} g`).join(' · ')}. Tổng ngày hiện tại: {fmt(dailyNutrition.calories)} kcal, {fmt(dailyNutrition.carb, 1)} g carb.</p>}
                 <p className="mt-4 text-xs leading-5 text-muted">Khối lượng là thực phẩm đã nấu chín; 1 chén cơm gạt ngang quy ước khoảng 150 g, 1 tô cháo nhỏ khoảng 250 g. Dinh dưỡng là ước tính tham khảo, thay đổi theo cách nấu và kích thước chén/tô. Chọn tối đa một lựa chọn cho mỗi bữa; lựa chọn được ghi nhớ trên thiết bị này. Gợi ý hiện dùng phân bổ mặc định 25/40/35.</p>
               </section>
-              {plan.warnings.map((warning) => <p key={warning} className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-800">{warning}</p>)}
             </>
           ) : (
             <section className="card p-8 text-center">
               <CalendarDaysIcon className="mx-auto h-8 w-8 text-brand" />
               <h2 className="mt-3 text-lg font-semibold">Chưa có kế hoạch cho ngày này</h2>
-              <p className="mt-1 text-sm text-muted">Tạo thực đơn để lưu sáng, trưa và tối vào lịch sử của bạn.</p>
             </section>
           )}
         </>
@@ -330,7 +327,6 @@ function DishRow({dish, onSelect, onMarkCooked, busy}: {dish: MealPlanDish; onSe
       </h3>
       <p className="mt-1 text-sm text-muted">{fmt(dish.serving_grams, 1)} g · {fmt(dish.calories)} kcal theo khẩu phần này</p>
       <p className="mt-2 text-xs text-muted">Protein {fmt(dish.protein, 1)} g · Carb {fmt(dish.carb, 1)} g · Fat {fmt(dish.fat, 1)} g</p>
-      <p className="mt-3 text-xs leading-5 text-muted">{dish.reason}</p>
       <button type="button" disabled={busy} onClick={onMarkCooked} className={`mt-3 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 ${dish.is_cooked ? 'bg-emerald-100 text-emerald-800' : 'bg-surface text-brand hover:bg-emerald-50'}`}>{busy ? 'Đang lưu…' : dish.is_cooked ? '✓ Đã nấu' : 'Xác nhận đã nấu'}</button>
     </div>
   );

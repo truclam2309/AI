@@ -30,7 +30,7 @@ export function AppLayout() {
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface lg:flex">
         <div className="flex items-center gap-2 px-6 py-6 text-lg font-semibold text-brand">
           <LeafIcon className="h-6 w-6" aria-hidden="true" />
-          NutriAI
+          <span>MyFit<span className="mt-0.5 block text-[10px] font-medium text-muted">Ăn khỏe dáng xinh</span></span>
         </div>
         <nav aria-label="Điều hướng chính" className="flex-1 space-y-1 px-3">
           {navItems.map(({ to, label, Icon, end }) =>
@@ -56,7 +56,7 @@ export function AppLayout() {
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{displayName}</p>
-              <p className="truncate text-xs text-muted">{user?.email ?? 'NutriAI'}</p>
+              <p className="truncate text-xs text-muted">{user?.email ?? 'MyFit'}</p>
             </div>
             <button type="button" onClick={logout} className="btn-ghost h-9 w-9 px-0" aria-label="Đăng xuất">
               <LogOutIcon className="h-4 w-4" />
@@ -70,7 +70,7 @@ export function AppLayout() {
         <div className="flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-2 font-semibold text-brand">
             <LeafIcon className="h-5 w-5" aria-hidden="true" />
-            NutriAI
+            <span className="leading-tight">MyFit<span className="block text-[9px] font-medium text-muted">Ăn khỏe dáng xinh</span></span>
           </div>
           <button type="button" onClick={logout} className="btn-ghost h-10 gap-1.5 px-3" aria-label="Đăng xuất">
             <span className="grid h-7 w-7 place-items-center rounded-full bg-brand text-xs font-semibold text-white">

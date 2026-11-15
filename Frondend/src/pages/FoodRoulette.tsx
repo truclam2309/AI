@@ -26,12 +26,6 @@ const GOALS: Record<NutritionGoal, string> = {
 };
 const STORE_PREFIX = 'nutriai.food-roulette';
 const PAGE_SIZE = 500;
-const GOAL_ALIASES: Record<NutritionGoal, string[]> = {
-  lose_weight: ['giảm cân', 'giảm mỡ'],
-  gain_weight: ['tăng cân'],
-  gain_muscle: ['tăng cơ'],
-  maintain_weight: ['duy trì', 'duy trì cân nặng'],
-};
 
 function shuffle<T,>(items: T[]): T[] {
   const result = [...items];
@@ -40,10 +34,6 @@ function shuffle<T,>(items: T[]): T[] {
     [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
   }
   return result;
-}
-
-function normalized(value: string | null | undefined) {
-  return value?.normalize('NFC').trim().toLocaleLowerCase('vi') ?? '';
 }
 
 function recipeSteps(instructions: string | null): string[] {
@@ -66,9 +56,8 @@ async function loadGoalDishes(goal: NutritionGoal | null) {
   const remainingPages = await Promise.all(offsets.map((offset) => recommendationApi.dishes('', goal || '', PAGE_SIZE, offset)));
   const uniqueDishes = new Map<string, CatalogDish>();
   [firstPage, ...remainingPages].flatMap((page) => page.results).forEach((dish) => uniqueDishes.set(dish.dish_id, dish));
-  if (!goal) return [...uniqueDishes.values()];
-  const labels = GOAL_ALIASES[goal].map(normalized);
-  return [...uniqueDishes.values()].filter((dish) => labels.includes(normalized(dish.nutrition_label)));
+  // Goal now controls the model score and ordering, not which dishes are hidden.
+  return [...uniqueDishes.values()];
 }
 
 export function FoodRoulette() {
@@ -233,27 +222,28 @@ export function FoodRoulette() {
       <p className="flex items-center justify-center gap-2 text-xs font-black tracking-[0.28em] text-[#ac5336] sm:text-sm"><ChefHatIcon className="h-4 w-4" /> EM THÍCH ĂN GÌ? <StarIcon className="h-3.5 w-3.5 fill-[#efb84c] text-[#efb84c]" /></p>
       <h1 className="mt-2 font-serif text-5xl font-black tracking-tight text-[#c64f35] drop-shadow-[0_2px_0_rgba(255,255,255,0.8)] sm:text-7xl">EM HỔNG BIẾT</h1>
       <p className="mt-2 text-sm text-[#806b59] sm:text-base">Hôm nay ăn gì? Để vòng quay quyết!</p>
-      <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#edd9ba] bg-white/80 px-4 py-2 text-xs font-semibold text-[#76543e] shadow-sm sm:text-sm"><SparklesIcon className="h-4 w-4 text-[#d46842]" />{goal ? <>Đang lọc món theo mục tiêu: <span className="font-black text-[#c45232]">{GOALS[goal]}</span></> : <>Đang xem tất cả món ăn trong catalog</>}</div>
+      <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#edd9ba] bg-white/80 px-4 py-2 text-xs font-semibold text-[#76543e] shadow-sm sm:text-sm"><SparklesIcon className="h-4 w-4 text-[#d46842]" />{goal ? <>Điểm phù hợp đang tính theo mục tiêu: <span className="font-black text-[#c45232]">{GOALS[goal]}</span></> : <>Đang xem tất cả món ăn; chọn mục tiêu để xem điểm phù hợp</>}</div>
     </header>
 
     <section className="relative mx-auto mt-5 flex max-w-3xl flex-wrap items-center justify-center gap-2 rounded-3xl border border-[#eddcc5] bg-white/85 p-3 shadow-sm sm:mt-6 sm:p-4">
-      <span className="px-2 text-xs font-bold text-[#76543e] sm:text-sm">Lọc món theo:</span>
+      <span className="px-2 text-xs font-bold text-[#76543e] sm:text-sm">Chấm điểm theo:</span>
       <button type="button" aria-pressed={goal === null} onClick={() => setGoal(null)} className={`rounded-full px-3 py-2 text-xs font-bold transition sm:text-sm ${goal === null ? 'bg-[#d85e3b] text-white shadow' : 'bg-[#fff3df] text-[#76543e] hover:bg-[#f8e5c8]'}`}>Tất cả món</button>
       {(Object.keys(GOALS) as NutritionGoal[]).map((value) => <button key={value} type="button" aria-pressed={goal === value} onClick={() => setGoal(value)} className={`rounded-full px-3 py-2 text-xs font-bold transition sm:text-sm ${goal === value ? 'bg-[#d85e3b] text-white shadow' : 'bg-[#fff3df] text-[#76543e] hover:bg-[#f8e5c8]'}`}>{GOALS[value]}</button>)}
     </section>
 
-    {loading ? <div className="mx-auto mt-8 max-w-xl"><LoadingState label="Đang tải món từ thực đơn NutriAI..." /></div> : error ? <section role="alert" className="mx-auto mt-8 max-w-xl rounded-3xl border border-red-200 bg-white p-6 text-center"><p className="font-semibold text-red-700">Chưa tải được món ăn</p><p className="mt-2 text-sm text-red-600">{error}</p><button type="button" onClick={() => setReloadVersion((version) => version + 1)} className="mt-4 rounded-full bg-[#d65d3d] px-5 py-2 text-sm font-bold text-white">Thử lại</button></section> : dishes.length === 0 ? <section className="mx-auto mt-8 max-w-xl rounded-3xl border border-[#eddcc5] bg-white/90 p-7 text-center shadow-sm"><ChefHatIcon className="mx-auto h-9 w-9 text-[#ce6742]" /><h2 className="mt-3 font-serif text-xl font-bold">Không có món khớp bộ lọc này</h2><p className="mt-2 text-sm leading-6 text-[#806e5f]">Thử chọn mục tiêu khác hoặc xem tất cả món.</p></section> : <>
+    {loading ? <div className="mx-auto mt-8 max-w-xl"><LoadingState label="Đang tải món từ MyFit..." /></div> : error ? <section role="alert" className="mx-auto mt-8 max-w-xl rounded-3xl border border-red-200 bg-white p-6 text-center"><p className="font-semibold text-red-700">Chưa tải được món ăn</p><p className="mt-2 text-sm text-red-600">{error}</p><button type="button" onClick={() => setReloadVersion((version) => version + 1)} className="mt-4 rounded-full bg-[#d65d3d] px-5 py-2 text-sm font-bold text-white">Thử lại</button></section> : dishes.length === 0 ? <section className="mx-auto mt-8 max-w-xl rounded-3xl border border-[#eddcc5] bg-white/90 p-7 text-center shadow-sm"><ChefHatIcon className="mx-auto h-9 w-9 text-[#ce6742]" /><h2 className="mt-3 font-serif text-xl font-bold">Không có món khớp bộ lọc này</h2><p className="mt-2 text-sm leading-6 text-[#806e5f]">Thử chọn mục tiêu khác hoặc xem tất cả món.</p></section> : <>
       <div className="relative mx-auto mt-5 max-w-3xl sm:mt-7">
         <div className="relative mx-auto w-fit">
           <RouletteWheel dishes={visibleDishes} rotation={rotation} spinning={spinning} onTransitionEnd={finishSpin} />
           <AIChefMascot goal={goal ?? profileGoal ?? 'maintain_weight'} remainingCalories={remainingCalories} />
         </div>
-        <p className="mt-2 text-center text-xs font-medium text-[#927966]">{eligibleDishes.length} món {goal ? 'phù hợp mục tiêu' : 'được tải'} · {visibleDishes.length} món trên vòng quay</p>
+        <p className="mt-2 text-center text-xs font-medium text-[#927966]">{eligibleDishes.length} món trong catalog · {visibleDishes.length} món trên vòng quay · điểm % là xác suất Random Forest dự đoán lớp mục tiêu</p>
       </div>
 
       {featuredDish && <section className="relative mx-auto mt-6 max-w-3xl rounded-3xl border border-[#ecd9bd] bg-white/95 p-5 shadow-[0_12px_32px_rgba(104,69,42,0.08)] sm:p-7" aria-labelledby="roulette-recipe-title">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><p className="text-xs font-black uppercase tracking-[0.16em] text-[#c45b39]">{winner?.dish_id === featuredDish.dish_id ? 'Món được chọn' : 'Công thức trên vòng quay'}</p><h2 id="roulette-recipe-title" className="mt-1 font-serif text-2xl font-bold text-[#563a2e]">{featuredDish.name}</h2></div>
+          {featuredDish.goal_fit_percent != null && <span className="rounded-full bg-[#e7f3e8] px-3 py-1.5 text-sm font-bold text-[#28623c]">Phù hợp mục tiêu {featuredDish.goal_fit_percent.toFixed(1)}%</span>}
           {featuredDish.calories != null && <span className="rounded-full bg-[#fff1dc] px-3 py-1.5 text-sm font-bold text-[#a64d31]">{fmt(featuredDish.calories, 1)} kcal</span>}
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">

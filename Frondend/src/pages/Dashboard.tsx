@@ -100,7 +100,6 @@ export function Dashboard() {
             ) : (
               <p className="p-5 text-sm leading-6 text-muted">Tạo thực đơn 3 bữa từ dữ liệu món ăn hiện có. Kế hoạch sẽ được lưu để xem lại sau.</p>
             )}
-            {plan?.warnings.map((warning) => <p key={warning} className="border-t border-line px-5 py-3 text-sm text-muted">{warning}</p>)}
           </section>
 
           <p className="text-xs leading-5 text-muted">BMR là năng lượng tiêu hao lúc nghỉ; TDEE là mức duy trì ước tính. BMI và các mức calo chỉ mang tính tham khảo.</p>

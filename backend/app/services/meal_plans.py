@@ -53,6 +53,11 @@ def create_meal_plan(
     dishes = get_dishes(db)
     if not dishes:
         raise HTTPException(503, "Catalog món ăn chưa được nạp; kiểm tra NUTRIAI_DATASET_PATH.")
+    if not state.model_bundle:
+        raise HTTPException(
+            503,
+            "Random Forest chưa được nạp; chưa thể tạo thực đơn. Kiểm tra NUTRIAI_MODEL_PATH và log khởi động backend.",
+        )
     try:
         selected, warnings = generate_meals(
             db,
@@ -75,7 +80,7 @@ def create_meal_plan(
         raise HTTPException(422, str(exc)) from exc
 
     if override_dish is not None:
-        if override_meal_type not in {"breakfast", "lunch", "dinner"}:
+        if override_meal_type not in {"breakfast", "lunch", "dinner", "snack"}:
             raise HTTPException(422, "Bữa ăn được chọn không hợp lệ.")
         _validate_manual_dish(override_dish, profile)
         replacement = _manual_dish_item(override_dish, override_meal_type)
@@ -97,10 +102,17 @@ def create_meal_plan(
         or 0
     ) + 1
     total_calories = round(sum(item["calories"] for item in selected), 1)
-    if abs(total_calories - nutrition["target_calories"]) / max(nutrition["target_calories"], 1) > 0.15:
-        warnings.append(
-            "Tổng calo thực đơn lệch hơn 15% so với mục tiêu; giới hạn khẩu phần và lựa chọn trong dataset không cho phép khớp sát hơn."
-        )
+    if total_calories > nutrition["target_calories"]:
+        raise HTTPException(422, "Không thể tạo thực đơn không vượt mục tiêu calo với các món và khẩu phần khả dụng.")
+    totals = {
+        key: sum(item[key] for item in selected)
+        for key in ("protein", "carb", "fat")
+    }
+    if any(
+        abs(totals[key] - nutrition[f"{key}_g"]) / max(nutrition[f"{key}_g"], 1.0) > 0.15
+        for key in totals
+    ):
+        warnings.append("Độ lệch protein/carb/fat vượt 15%; catalog không có tổ hợp gần mục tiêu hơn trong giới hạn calo và nhóm bữa.")
 
     plan = DailyMealPlan(
         user_id=user.id,
@@ -151,22 +163,19 @@ def replace_meal_with_dish(
     meal_type: str,
 ) -> dict:
     """Create a new immutable version with one meal replaced by a catalog dish."""
-    if meal_type not in {"breakfast", "lunch", "dinner"}:
+    if meal_type not in {"breakfast", "lunch", "dinner", "snack"}:
         raise HTTPException(422, "Bữa ăn được chọn không hợp lệ.")
     _validate_manual_dish(dish, user.profile)
     replacement = _manual_dish_item(dish, meal_type)
-    prior_slot = next((item for item in old_plan.items if item.meal_type == meal_type), None)
+    prior_slot = next((item for item in old_plan.items if item.meal_type == meal_type), None) if meal_type != "snack" else None
     replacement["position"] = prior_slot.position if prior_slot else max((item.position for item in old_plan.items), default=-1) + 1
 
     warnings = json.loads(old_plan.warnings_json or "[]")
     warnings.append("Một món được người dùng chọn và thay vào thực đơn; phiên bản trước vẫn được giữ trong lịch sử.")
-    total_calories = round(
-        sum(item.calories for item in old_plan.items if item.meal_type != meal_type)
-        + replacement["calories"],
-        1,
-    )
-    if abs(total_calories - old_plan.target_calories) / max(old_plan.target_calories, 1) > 0.15:
-        warnings.append("Tổng calo sau khi thay món lệch hơn 15% so với mục tiêu ngày.")
+    retained_items = [item for item in old_plan.items if meal_type == "snack" or item.meal_type != meal_type]
+    total_calories = round(sum(item.calories for item in retained_items) + replacement["calories"], 1)
+    if total_calories > old_plan.target_calories:
+        raise HTTPException(422, "Không thể thêm món vì tổng calo sẽ vượt mục tiêu ngày.")
     version = (
         db.scalar(select(func.max(DailyMealPlan.version)).where(
             DailyMealPlan.user_id == user.id,
@@ -187,7 +196,7 @@ def replace_meal_with_dish(
         warnings_json=json.dumps(warnings, ensure_ascii=False),
     )
     for item in old_plan.items:
-        if item.meal_type == meal_type:
+        if meal_type != "snack" and item.meal_type == meal_type:
             continue
         new_plan.items.append(MealPlanItem(
             dish_id=item.dish_id,

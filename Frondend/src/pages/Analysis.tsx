@@ -256,19 +256,6 @@ export function Analysis() {
           {splitTotal !== 100 && <p className="mt-3 text-xs text-accent">Hãy điều chỉnh tỷ lệ để tổng phân bổ bằng 100%.</p>}
         </section>
       </div>
-
-      <section className="card p-5 sm:p-6"><h2 className="text-lg font-semibold">Cách tính minh bạch</h2><div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <Formula title="BMI" formula="Cân nặng (kg) / chiều cao² (m)" detail={`${fmt(result.weight_kg, 1)} / (${fmt(result.height_cm, 1)} / 100)² = ${fmt(result.bmi, 1)} · ${bmiCategory}`} />
-        <Formula title="BMR · Mifflin–St Jeor" formula={result.formula.bmr} detail={`${labelFor([{value: 'male', label: 'Nam'}, {value: 'female', label: 'Nữ'}], result.sex_for_calculation)} · ${result.age_years} tuổi`} />
-        <Formula title="TDEE" formula="BMR × hệ số vận động" detail={`${fmt(result.bmr_kcal)} × ${result.formula.activity_factor} = ${fmt(result.tdee_kcal)} kcal/ngày · ${labelFor(activityOptions, result.activity_level)}`} />
-        <Formula title="Calories mục tiêu" formula={result.formula.target} detail={`${fmt(result.tdee_kcal)} × (1 ${result.formula.goal_adjustment_fraction < 0 ? '−' : '+'} ${fmt(Math.abs(result.formula.goal_adjustment_fraction) * 100, 0)}%) = ${fmt(result.target_calories)} kcal`} />
-        <Formula title="Protein" formula={result.formula.protein} detail={`Mục tiêu ${fmt(result.protein_g, 1)} g/ngày · 1 g = 4 kcal`} />
-        <Formula title="Fat và Carb" formula={`${result.formula.fat}; ${result.formula.carb}`} detail={`Fat ${fmt(result.fat_g, 1)} g · Carb ${fmt(result.carb_g, 1)} g · 9 kcal/g Fat, 4 kcal/g Carb`} />
-      </div>
-      <p className="mt-4 rounded-xl bg-surface p-3 text-xs leading-5 text-muted">Công thức Protein/Fat là cấu hình tham khảo, có thể hiệu chỉnh trong backend. Năng lượng từ macro: {fmt(result.macro_energy_kcal)} kcal so với mục tiêu {fmt(result.target_calories)} kcal; sai số do làm tròn số gram.</p>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-brand"><a className="hover:underline" href="https://pubmed.ncbi.nlm.nih.gov/2305711/" target="_blank" rel="noreferrer">Mifflin–St Jeor · nghiên cứu gốc</a><a className="hover:underline" href="https://www.canada.ca/en/health-canada/services/food-nutrition/healthy-eating/dietary-reference-intakes/tables/reference-values-macronutrients.html" target="_blank" rel="noreferrer">Khoảng phân bố đa lượng (AMDR)</a><a className="hover:underline" href="https://link.springer.com/article/10.1186/s12970-017-0177-8" target="_blank" rel="noreferrer">ISSN · protein và vận động</a></div>
-      {result.warnings.map((warning) => <p key={warning} className="mt-3 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-900">{warning}</p>)}
-      <p className="mt-4 text-xs leading-5 text-muted">BMI là chỉ số sàng lọc, không phải chẩn đoán bệnh. BMR, TDEE và nhu cầu đa lượng là ước tính tham khảo.</p></section>
     </>}
   </div>;
 }
@@ -280,4 +267,3 @@ function Stat({icon, label, value, unit, hint, highlight = false}: {icon: ReactN
 function MacroCard({icon, label, value, unit, share, color, note}: {icon: ReactNode; label: string; value: number; unit: string; share: number; color: string; note: string}) {
   return <article className="card p-5"><div className={`flex items-center justify-between ${color}`}><span className="text-sm font-semibold">{label}</span>{icon}</div><p className="mt-4 text-3xl font-semibold tabular-nums">{fmt(value, 1)}</p><p className="text-sm text-muted">{unit}</p><div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-xs"><span className="text-muted">Năng lượng</span><strong>{fmt(share, 1)}%</strong></div><p className="mt-2 text-xs leading-5 text-muted">{note}</p></article>;
 }
-function Formula({title, formula, detail}: {title: string; formula: string; detail: string}) { return <article className="rounded-xl bg-surface p-4"><h3 className="text-sm font-semibold">{title}</h3><code className="mt-2 block break-words text-xs leading-5 text-brand">{formula}</code><p className="mt-2 text-xs leading-5 text-muted">{detail}</p></article>; }
