@@ -10,7 +10,9 @@ import { Login } from './pages/Login';
 import { MealPlan } from './pages/MealPlan';
 import { Profile } from './pages/Profile';
 import { Recommendations } from './pages/Recommendations';
+import { DishMenu } from './pages/DishMenu';
 import { Register } from './pages/Register';
+import { FoodRoulette } from './pages/FoodRoulette';
 
 export function App() {
   return (
@@ -29,6 +31,8 @@ export function App() {
               
               <Route index element={<Dashboard />} />
               <Route path="recommendations" element={<Recommendations />} />
+              <Route path="menu" element={<DishMenu />} />
+              <Route path="roulette" element={<FoodRoulette />} />
               <Route path="meal-plan" element={<MealPlan />} />
               <Route path="analysis" element={<Analysis />} />
               <Route path="profile" element={<Profile />} />

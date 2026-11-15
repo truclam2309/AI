@@ -2,6 +2,7 @@ import { FormEvent, KeyboardEvent, useEffect, useState } from 'react';
 import { ImageIcon, LoaderCircleIcon, PlusIcon, SearchIcon, XIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { resolveAssetUrl } from '../api/client';
 import { recommendationApi } from '../api/recommendationApi';
 import { mealPlanApi } from '../api/mealPlanApi';
 import { toApiError } from '../api/errors';
@@ -264,7 +265,7 @@ function RecommendationCard({dish, mealType, saving, busy, onChoose, onOpen}: {d
 function DishImage({src, alt}: {src: string | null; alt: string}) {
   const [failed, setFailed] = useState(false);
   return src && !failed
-    ? <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className="h-48 w-full bg-surface object-cover sm:h-full sm:min-h-56" />
+    ? <img src={resolveAssetUrl(src) ?? undefined} alt={alt} loading="lazy" onError={() => setFailed(true)} className="h-48 w-full bg-surface object-cover sm:h-full sm:min-h-56" />
     : <div className="flex h-48 items-center justify-center bg-surface text-muted sm:min-h-56"><ImageIcon className="h-8 w-8" /><span className="sr-only">Chưa có ảnh món {alt}</span></div>;
 }
 
@@ -283,6 +284,7 @@ function RecommendationDetails({dish, onClose}: {dish: IngredientRecommendation;
           {dish.ingredients.length ? <ul className="divide-y divide-[#eee3d9]">{dish.ingredients.map((ingredient) => <li key={ingredient} className="flex min-h-12 items-center justify-between gap-3 py-2.5 text-sm"><span>{ingredient}</span><span className={`shrink-0 text-xs font-medium ${available.has(ingredientKey(ingredient)) ? 'text-brand' : 'text-accent'}`}>{available.has(ingredientKey(ingredient)) ? 'Đã có' : 'Còn thiếu'}</span></li>)}</ul> : <p className="text-sm text-muted">Chưa có danh sách nguyên liệu cho món này.</p>}
         </section>
         <section><h3 className="mb-3 text-2xl font-medium">Các bước nấu</h3>{steps.length ? <ol className="space-y-3">{steps.map((step, index) => <li key={`${index}-${step}`} className="rounded-2xl bg-white p-4 sm:p-5"><div className="flex items-start gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#cf4f2c] text-sm font-semibold text-white">{index + 1}</span><p className="pt-1 text-sm leading-6 sm:text-base">{step}</p></div></li>)}</ol> : <p className="text-sm text-muted">Catalog chưa có hướng dẫn chế biến cho món này.</p>}</section>
+
       </div>
     </section>
   </div>;

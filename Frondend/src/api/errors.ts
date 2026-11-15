@@ -50,5 +50,5 @@ export function errorFromResponse(status: number, data: unknown): ApiError {
   if (status === 404) {
     return new ApiError('not_found', typeof detail === 'string' ? detail : 'Không tìm thấy dữ liệu.', status);
   }
-  return new ApiError('server', 'Máy chủ gặp sự cố. Vui lòng thử lại sau.', status);
+  return new ApiError('server', typeof detail === 'string' ? detail : `Máy chủ gặp sự cố (HTTP ${status}). Vui lòng kiểm tra backend và thử lại.`, status);
 }

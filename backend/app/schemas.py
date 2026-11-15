@@ -65,12 +65,18 @@ class NutritionHistorySaveInput(BaseModel):
 class GenerateInput(BaseModel):
     plan_date: date | None = None
     meal_split: dict[str, float] | None = None
+    main_meals: int = Field(default=3, ge=1, le=9)
+    side_meals: int = Field(default=0, ge=0, le=6)
 
 
 class SelectDishInput(BaseModel):
     plan_date: date
     meal_type: Literal["breakfast", "lunch", "dinner"]
     dish_id: str = Field(min_length=1, max_length=80)
+
+
+class CookedInput(BaseModel):
+    is_cooked: bool
 
 
 class IngredientSearchInput(BaseModel):
@@ -116,4 +122,36 @@ class IngredientSearchResponse(BaseModel):
     total: int
     results: list[IngredientRecommendation]
     warnings: list[str]
+
+
+class CatalogDish(BaseModel):
+    dish_id: str
+    name: str
+    image_url: str | None
+    ingredients: list[str]
+    instructions: str | None
+    food_group: str | None
+    calories: float | None
+    protein: float | None
+    carb: float | None
+    fat: float | None
+    serving_grams: float | None
+    nutrition_label: str | None
+
+    @classmethod
+    def from_dish(cls, dish):
+        raw = dish.ingredients or ""
+        ingredients = [part.strip() for part in raw.replace("\n", "|").replace(";", "|").split("|") if part.strip()]
+        return cls(
+            dish_id=dish.id, name=dish.name, image_url=dish.image_url, ingredients=ingredients,
+            instructions=dish.instructions, food_group=dish.food_group,
+            calories=dish.calories_per_serving, protein=dish.protein_per_serving,
+            carb=dish.carb_per_serving, fat=dish.fat_per_serving,
+            serving_grams=dish.serving_g, nutrition_label=dish.nutrition_label,
+        )
+
+
+class CatalogDishResponse(BaseModel):
+    total: int
+    results: list[CatalogDish]
 

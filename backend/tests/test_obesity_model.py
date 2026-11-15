@@ -7,7 +7,8 @@ from sklearn.pipeline import Pipeline
 import train_obesity_model as obesity
 
 
-DATA_PATH = Path(__file__).resolve().parents[2] / "bộ dữ liệu về thể trạng.csv"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+DATA_PATH = BACKEND_DIR / "data" / "bộ dữ liệu về thể trạng.csv"
 
 
 def sample_user_data():
@@ -85,7 +86,7 @@ def test_pickle_round_trip_preserves_predictions():
     model = obesity.load_model()
     values = sample_user_data()
     row = obesity._validate_user_data(values, model)
-    reloaded_path = DATA_PATH.parent / "backend" / "models" / "obesity_status_model.pkl"
+    reloaded_path = BACKEND_DIR / "models" / "obesity_status_model.pkl"
     with reloaded_path.open("rb") as file:
         reloaded = pickle.load(file)
     assert model.predict(row).tolist() == reloaded.predict(row).tolist()

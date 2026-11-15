@@ -24,13 +24,23 @@ const env = (
  * VITE_API_URL có thể có hoặc không có /api/v1.
  * Tự động chuẩn hóa để tránh lặp đường dẫn.
  */
-const API_BASE_URL = (
-  env?.VITE_API_URL ?? 'https://ai-9kpu.onrender.com'
-).replace(/\/+$/, '');
+const configuredApiUrl = env?.VITE_API_URL?.replace(/\/+$/, '');
+const PRODUCTION_API_URL = 'https://ai-9kpu.onrender.com/api/v1';
+// In development, leave the URL relative only when no API URL is configured;
+// Vite then proxies /api to the local FastAPI service. An explicit VITE_API_URL
+// works in both development (for testing Render) and production (Vercel).
+const API_BASE_URL = configuredApiUrl ?? (env?.DEV ? '' : PRODUCTION_API_URL);
 
 export const API_URL = API_BASE_URL.endsWith('/api/v1')
   ? API_BASE_URL
   : `${API_BASE_URL}/api/v1`;
+export const API_ORIGIN = API_URL.replace(/\/api\/v1\/?$/, '');
+
+export function resolveAssetUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (/^(?:[a-z][a-z\d+.-]*:)?\/\//i.test(url) || /^(?:data|blob):/i.test(url)) return url;
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
+}
 
 const TOKEN_KEY = 'nutriai.token';
 export const UNAUTHORIZED_EVENT = 'nutriai:unauthorized';

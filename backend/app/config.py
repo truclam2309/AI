@@ -29,13 +29,24 @@ except ImportError:
     pass
 
 
+def _database_url() -> str:
+    url = os.getenv("NUTRIAI_DATABASE_URL", "sqlite:///./nutriai.db")
+    # Render/Postgres commonly supplies a URL without an explicit SQLAlchemy
+    # driver. Use psycopg 3 when a PostgreSQL URL is configured.
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgres://")
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+    return url
+
+
 @dataclass(frozen=True)
 class Settings:
     secret_key: str = os.getenv("NUTRIAI_SECRET_KEY", "")
-    database_url: str = os.getenv("NUTRIAI_DATABASE_URL", "sqlite:///./nutriai.db")
+    database_url: str = _database_url()
     data_dir: Path = Path(os.getenv("NUTRIAI_DATA_DIR", str(Path(__file__).resolve().parents[1] / "data"))).resolve()
     dataset_path: Path = Path(os.getenv("NUTRIAI_DATASET_PATH", str(data_dir / "bo-du-lieu-mon-an.xlsx"))).resolve()
-    model_path: Path = Path(os.getenv("NUTRIAI_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "models" / "obesity_status_model.pkl"))).resolve()
+    model_path: Path = Path(os.getenv("NUTRIAI_MODEL_PATH", str(Path(__file__).resolve().parents[1] / "models" / "mo_hinh_dinh_duong.pkl"))).resolve()
     token_ttl_seconds: int = int(os.getenv("NUTRIAI_TOKEN_TTL_SECONDS", "86400"))
     timezone_name: str = os.getenv("NUTRIAI_TIMEZONE", "Asia/Ho_Chi_Minh")
     cors_origins: tuple[str, ...] = tuple(

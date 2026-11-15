@@ -36,3 +36,10 @@ export interface IngredientSearchResponse {
   results: IngredientRecommendation[];
   warnings: string[];
 }
+
+export interface CatalogDish extends Omit<IngredientRecommendation, 'matched_ingredients' | 'missing_ingredients' | 'matched_count' | 'required_count' | 'ingredient_match_ratio' | 'similarity_score' | 'nutrition_label_note'> {}
+
+export interface CatalogDishResponse {
+  total: number;
+  results: CatalogDish[];
+}

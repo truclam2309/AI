@@ -23,7 +23,11 @@ def create_meal_plan(
     excluded_plan_id: int | None = None,
     override_dish: Dish | None = None,
     override_meal_type: str | None = None,
+    main_meals: int = 3,
+    side_meals: int = 0,
 ) -> dict:
+    # Kept for caller compatibility; all same-day versions now contribute to
+    # the variety penalty and no longer need to be special-cased.
     profile = user.profile
     if profile is None:
         raise HTTPException(422, "Hãy hoàn thiện hồ sơ dinh dưỡng trước khi tạo thực đơn.")
@@ -58,13 +62,14 @@ def create_meal_plan(
             plan_date,
             nutrition["target_calories"],
             split,
-            excluded_plan_id,
-            state.model_bundle,
+            model_bundle=state.model_bundle,
             target_macros={
                 "protein": nutrition["protein_g"],
                 "carb": nutrition["carb_g"],
                 "fat": nutrition["fat_g"],
             },
+            main_meals=main_meals,
+            side_meals=side_meals,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc

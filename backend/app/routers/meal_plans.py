@@ -9,13 +9,33 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..dependencies import current_user
-from ..models import DailyMealPlan, Dish, User
-from ..schemas import GenerateInput, SelectDishInput
+from ..models import DailyMealPlan, Dish, MealPlanItem, User
+from ..schemas import CookedInput, GenerateInput, SelectDishInput
 from ..services.meal_plans import create_meal_plan, replace_meal_with_dish
 from ..utils.time import local_today
 from ..utils.serialization import serialize_plan
 
 router = APIRouter(prefix="/api/v1/meal-plans", tags=["Meal plans"])
+
+
+@router.put("/items/{item_id}/cooked")
+def set_item_cooked(
+    item_id: int,
+    payload: CookedInput,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    item = db.scalar(
+        select(MealPlanItem).join(DailyMealPlan).where(
+            MealPlanItem.id == item_id,
+            DailyMealPlan.user_id == user.id,
+        )
+    )
+    if item is None:
+        raise HTTPException(404, "Không tìm thấy món trong thực đơn của bạn.")
+    item.is_cooked = payload.is_cooked
+    db.commit()
+    return {"id": item.id, "is_cooked": item.is_cooked}
 
 
 @router.post("/select-dish", status_code=201)
@@ -66,10 +86,18 @@ def generate(
         .limit(1)
     )
     if existing is not None:
+        if payload.meal_split is not None or payload.main_meals != 3 or payload.side_meals != 0:
+            return {
+                "data": create_meal_plan(
+                    db, user, plan_date, payload.meal_split,
+                    main_meals=payload.main_meals, side_meals=payload.side_meals,
+                ),
+                "created": True,
+            }
         response.status_code = 200
         return {"data": serialize_plan(existing), "created": False}
     return {
-        "data": create_meal_plan(db, user, plan_date, payload.meal_split),
+        "data": create_meal_plan(db, user, plan_date, payload.meal_split, main_meals=payload.main_meals, side_meals=payload.side_meals),
         "created": True,
     }
 
@@ -217,6 +245,7 @@ def regenerate(
             user,
             old_plan.plan_date,
             split=payload.meal_split if payload else None,
-            excluded_plan_id=old_plan.id,
+            main_meals=payload.main_meals if payload else 3,
+            side_meals=payload.side_meals if payload else 0,
         )
     }

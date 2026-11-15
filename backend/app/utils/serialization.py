@@ -68,6 +68,7 @@ def serialize_plan(plan: DailyMealPlan) -> dict:
         "created_at": to_local_iso(plan.created_at),
         "meals": [
             {
+                "id": item.id,
                 "dish_id": item.dish_id,
                 "name": item.dish_name_snapshot,
                 "food_group": item.food_group_snapshot,
@@ -75,6 +76,7 @@ def serialize_plan(plan: DailyMealPlan) -> dict:
                 "instructions": item.instructions_snapshot or (item.dish.instructions if item.dish else None),
                 "image_url": item.image_url_snapshot or (item.dish.image_url if item.dish else None),
                 "meal_type": item.meal_type,
+                "is_cooked": item.is_cooked,
                 "serving_grams": item.serving_grams,
                 "calories": item.calories,
                 "protein": item.protein,

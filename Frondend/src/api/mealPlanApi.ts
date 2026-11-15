@@ -6,17 +6,19 @@ export const mealPlanApi = {
     (await request<{date: string; data: DailyMealPlan[]}>('GET', '/meal-plans', {
       query: date ? { date } : undefined
     })).data,
-  generate: (planDate: string, mealSplit?: Record<string, number>) =>
+  generate: (planDate: string, mealSplit?: Record<string, number>, counts?: {main_meals: number; side_meals: number}) =>
     request<GeneratePlanResponse>('POST', '/meal-plans/generate', {
-      body: { plan_date: planDate, ...(mealSplit ? { meal_split: mealSplit } : {}) },
-      timeoutMs: 60000
+      body: { plan_date: planDate, ...(mealSplit ? { meal_split: mealSplit } : {}), ...counts },
+      timeoutMs: 120000
     }),
-  regenerate: (planId: number, mealSplit?: Record<string, number>) =>
+  regenerate: (planId: number, mealSplit?: Record<string, number>, counts?: {main_meals: number; side_meals: number}) =>
     request<GeneratePlanResponse>('POST', `/meal-plans/${planId}/regenerate`, {
-      ...(mealSplit ? { body: { meal_split: mealSplit } } : {}), timeoutMs: 60000
+      body: { ...(mealSplit ? { meal_split: mealSplit } : {}), ...counts }, timeoutMs: 120000
     }),
+  setCooked: (itemId: number, isCooked: boolean) =>
+    request<{id: number; is_cooked: boolean}>('PUT', `/meal-plans/items/${itemId}/cooked`, { body: { is_cooked: isCooked } }),
   selectDish: (payload: {plan_date: string; meal_type: MealType; dish_id: string}) =>
-    request<GeneratePlanResponse>('POST', '/meal-plans/select-dish', { body: payload, timeoutMs: 60000 }),
+    request<GeneratePlanResponse>('POST', '/meal-plans/select-dish', { body: payload, timeoutMs: 120000 }),
   history: (page = 1, pageSize = 20) =>
     request<{page: number; page_size: number; total: number; data: DailyMealPlan[]}>(
       'GET', '/meal-plans/history', { query: { page, page_size: pageSize } }

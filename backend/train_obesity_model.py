@@ -9,6 +9,7 @@ FastAPI can import ``predict_body_status`` after the model has been trained:
 from __future__ import annotations
 
 import argparse
+from functools import lru_cache
 import json
 import pickle
 import sys
@@ -333,6 +334,7 @@ def train_model(
     return metrics
 
 
+@lru_cache(maxsize=4)
 def load_model(model_path: str | Path | None = None) -> Pipeline:
     """Load a trained Pipeline; never triggers training."""
     destination = Path(model_path).resolve() if model_path else DEFAULT_MODEL
@@ -344,6 +346,15 @@ def load_model(model_path: str | Path | None = None) -> Pipeline:
         model = pickle.load(model_file)
     if not isinstance(model, Pipeline):
         raise TypeError("File mô hình không chứa sklearn Pipeline hợp lệ.")
+    # Inference handles one profile per request. Avoid creating a worker pool
+    # for each call, especially on small Render instances.
+    parallel_params = {
+        name: 1
+        for name, value in model.get_params(deep=True).items()
+        if name.endswith("n_jobs") and value == -1
+    }
+    if parallel_params:
+        model.set_params(**parallel_params)
     return model
 
 

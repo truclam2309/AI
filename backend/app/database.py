@@ -9,7 +9,7 @@ class Base(DeclarativeBase):
 
 
 connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-engine = create_engine(settings.database_url, connect_args=connect_args, future=True)
+engine = create_engine(settings.database_url, connect_args=connect_args, pool_pre_ping=True, future=True)
 if settings.database_url.startswith("sqlite"):
     @event.listens_for(engine, "connect")
     def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
@@ -29,10 +29,12 @@ def migrate_recipe_columns(database_engine=None) -> None:
             "image_url": "TEXT",
             "image_file": "VARCHAR(255)",
             "nutrition_label": "VARCHAR(40)",
+            "meal_category": "VARCHAR(40)",
         },
         "meal_plan_items": {
             "instructions_snapshot": "TEXT",
             "image_url_snapshot": "TEXT",
+            "is_cooked": "BOOLEAN NOT NULL DEFAULT 0",
         },
         "user_profiles": {
             "full_name": "VARCHAR(160)",
@@ -40,8 +42,13 @@ def migrate_recipe_columns(database_engine=None) -> None:
     }
     inspector = inspect(database_engine)
     with database_engine.begin() as connection:
+        existing_tables = set(inspector.get_table_names())
         for table_name, columns in additions.items():
-            existing = {column["name"] for column in inspector.get_columns(table_name)}
+            # create_all normally creates these tables first, but keep migrations
+            # safe for databases where a feature table has not been created yet.
+            if table_name not in existing_tables:
+                continue
+            existing = {column["name"] for column in inspect(connection).get_columns(table_name)}
             for column_name, column_type in columns.items():
                 if column_name not in existing:
                     connection.execute(text(

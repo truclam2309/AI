@@ -1,6 +1,6 @@
-# NutriAI API
+## Chạy local hoặc deploy Render
 
-Backend local FastAPI cho hồ sơ dinh dưỡng và thực đơn có lịch sử phiên bản.
+Local: chạy `uvicorn app.main:app --reload` (chỉ dùng reload khi phát triển). Tại thư mục gốc repo có `render.yaml` để cấu hình Render. Cung cấp `NUTRIAI_SECRET_KEY`, URL PostgreSQL cho `NUTRIAI_DATABASE_URL`, và origin Vercel cho `NUTRIAI_CORS_ORIGINS`; URL `postgresql://` và `postgres://` được tự đổi sang driver psycopg 3. Không dùng SQLite trên Render vì filesystem web service là tạm thời. Sau deploy kiểm tra `/health` và `/docs`.
 
 ## Chạy trên Windows PowerShell
 
@@ -80,6 +80,7 @@ Random Forest hiện có được kiểm tra khi khởi động, nếu tương t
 ## Kiểm thử
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 

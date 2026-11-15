@@ -1,7 +1,7 @@
 export type SexForCalculation = 'male' | 'female';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 export type NutritionGoal = 'lose_weight' | 'gain_weight' | 'gain_muscle' | 'maintain_weight';
-export type MealType = 'breakfast' | 'lunch' | 'dinner';
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type NutritionHistoryItem = NutritionCalculation & { id: number; body_status?: BodyStatusPrediction; body_status_input?: BodyStatusRequest };
 
 export interface BodyStatusRequest {
@@ -99,6 +99,8 @@ export interface MealPlanDish {
   carb: number;
   fat: number;
   position: number;
+  id?: number;
+  is_cooked?: boolean;
   reason: string;
 }
 

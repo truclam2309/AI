@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CalendarDaysIcon, ImageIcon, LoaderCircleIcon, RefreshCwIcon, SparklesIcon, XIcon } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { resolveAssetUrl } from '../api/client';
 import { mealPlanApi } from '../api/mealPlanApi';
 import { toApiError } from '../api/errors';
 import { LoadingState } from '../components/LoadingState';
@@ -15,6 +16,32 @@ const meals = [
   { key: 'lunch', label: 'Bữa trưa', hint: 'Bữa ăn chính giữa ngày' },
   { key: 'dinner', label: 'Bữa tối', hint: 'Hoàn tất thực đơn trong ngày' }
 ] as const;
+const snackMeal = { key: 'snack', label: 'Bữa phụ', hint: 'Bữa ăn nhẹ trong ngày' } as const;
+// Reference estimates for cooked foods; bowl/portion weights are explicit so
+// the UI never presents an undefined “small serving”. Actual recipes vary.
+const starchOptions = [
+  { name: 'Cơm trắng', kcalPer100g: 130, carbPer100g: 28.2, portionLabel: '1 chén cơm gạt ngang ≈ 150 g', portionGrams: 150 },
+  { name: 'Cơm gạo lứt', kcalPer100g: 123, carbPer100g: 25.6, portionLabel: '1 chén cơm gạt ngang ≈ 150 g', portionGrams: 150 },
+  { name: 'Bún tươi', kcalPer100g: 109, carbPer100g: 25, portionLabel: '1 phần nhỏ ≈ 150 g', portionGrams: 150 },
+  { name: 'Cháo trắng', kcalPer100g: 40, carbPer100g: 8.5, portionLabel: '1 tô nhỏ ≈ 250 g', portionGrams: 250 },
+  { name: 'Khoai lang luộc', kcalPer100g: 86, carbPer100g: 20.1, portionLabel: '1 củ vừa ≈ 130 g', portionGrams: 130 },
+];
+type StarchChoice = { name: string; grams: number; calories: number; carb: number };
+const STARCH_STORAGE_KEY = 'nutriai-meal-plan-starch-additions-v1';
+
+function readStarchChoices(): Record<string, StarchChoice> {
+  try {
+    return JSON.parse(localStorage.getItem(STARCH_STORAGE_KEY) ?? '{}') as Record<string, StarchChoice>;
+  } catch {
+    return {};
+  }
+}
+
+function starchAdviceSelections(planId: number | undefined, choices: Record<string, StarchChoice>): StarchChoice[] {
+  if (planId === undefined) return [];
+  const prefix = `${planId}:`;
+  return Object.entries(choices).filter(([key]) => key.startsWith(prefix)).map(([, choice]) => choice);
+}
 
 export function MealPlan() {
   const { user } = useAuth();
@@ -29,6 +56,14 @@ export function MealPlan() {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
   const [selectedDish, setSelectedDish] = useState<MealPlanDish | null>(null);
+  const [mainMeals, setMainMeals] = useState(3);
+  const [sideMeals, setSideMeals] = useState(0);
+  const [cookingIds, setCookingIds] = useState<number[]>([]);
+  const [starchChoices, setStarchChoices] = useState<Record<string, StarchChoice>>(readStarchChoices);
+
+  useEffect(() => {
+    try { localStorage.setItem(STARCH_STORAGE_KEY, JSON.stringify(starchChoices)); } catch { /* Storage can be disabled; the current page still works. */ }
+  }, [starchChoices]);
 
   useEffect(() => {
     if (dateFromQuery && /^\d{4}-\d{2}-\d{2}$/.test(dateFromQuery)) setSelectedDate(dateFromQuery);
@@ -42,7 +77,8 @@ export function MealPlan() {
       .then((result) => {
         if (!active) return;
         setPlans(result);
-        setVersionId(result[result.length - 1]?.id ?? null);
+        const latest = result[result.length - 1] ?? null;
+        setVersionId(latest?.id ?? null);
       })
       .catch((cause) => { if (active) setError(toApiError(cause).message); })
       .finally(() => { if (active) setLoading(false); });
@@ -50,6 +86,50 @@ export function MealPlan() {
   }, [selectedDate]);
 
   const plan = useMemo(() => plans.find((item) => item.id === versionId) ?? plans[plans.length - 1] ?? null, [plans, versionId]);
+  useEffect(() => {
+    if (!plan) return;
+    setMainMeals(plan.meals.filter((item) => item.meal_type !== 'snack').length);
+    setSideMeals(plan.meals.filter((item) => item.meal_type === 'snack').length);
+  }, [plan]);
+  const displayedMeals = useMemo(
+    () => plan ? [...plan.meals].sort((a, b) => a.position - b.position).slice(0, mainMeals + sideMeals) : [],
+    [plan, mainMeals, sideMeals]
+  );
+  const displayedNutrition = useMemo(() => displayedMeals.reduce((sum, dish) => ({
+    calories: sum.calories + dish.calories,
+    protein: sum.protein + dish.protein,
+    carb: sum.carb + dish.carb,
+    fat: sum.fat + dish.fat,
+  }), { calories: 0, protein: 0, carb: 0, fat: 0 }), [displayedMeals]);
+  const selectedAdditions = useMemo(() => starchAdviceSelections(plan?.id, starchChoices), [plan?.id, starchChoices]);
+  const dailyNutrition = useMemo(() => ({
+    calories: displayedNutrition.calories + selectedAdditions.reduce((sum, item) => sum + item.calories, 0),
+    protein: displayedNutrition.protein,
+    carb: displayedNutrition.carb + selectedAdditions.reduce((sum, item) => sum + item.carb, 0),
+    fat: displayedNutrition.fat,
+  }), [displayedNutrition, selectedAdditions]);
+  const starchAdvice = useMemo(() => {
+    if (!plan) return [];
+    const split = { breakfast: 0.25, lunch: 0.40, dinner: 0.35 };
+    return (['breakfast', 'lunch', 'dinner'] as const).map((mealType) => {
+      const mealCalories = displayedMeals.filter((dish) => dish.meal_type === mealType).reduce((sum, dish) => sum + dish.calories, 0);
+      const remaining = Math.max(0, plan.target_calories * split[mealType] - mealCalories);
+      // Use part of a meaningful energy gap for starch; retain room for protein,
+      // vegetables and fat instead of filling every missing kcal with carbs.
+      const addKcal = remaining >= 50 ? Math.min(remaining * 0.4, 220) : 0;
+      const options = addKcal ? starchOptions.map((food) => {
+        const grams = Math.round(addKcal / food.kcalPer100g * 100 / 10) * 10;
+        const calories = Math.round(grams * food.kcalPer100g / 100);
+        const carb = Math.round(grams * food.carbPer100g / 100);
+        const portions = grams / food.portionGrams;
+        const portionText = portions < 0.8
+          ? `${Math.round(portions * 4) / 4} ${food.name === 'Khoai lang luộc' ? 'củ' : food.name === 'Cháo trắng' ? 'tô' : food.name === 'Bún tươi' ? 'phần' : 'chén'} (quy đổi từ ${food.portionLabel})`
+          : `${Math.round(portions * 4) / 4} ${food.name === 'Khoai lang luộc' ? 'củ' : food.name === 'Cháo trắng' ? 'tô' : food.name === 'Bún tươi' ? 'phần' : 'chén'}`;
+        return { ...food, grams, calories, carb, portionText };
+      }) : [];
+      return { mealType, mealCalories, remaining, addKcal, options };
+    });
+  }, [plan, displayedMeals]);
   const completeProfile = Boolean(user?.profile?.date_of_birth && user.profile.height_cm && user.profile.weight_kg &&
     user.profile.sex_for_calculation && user.profile.activity_level && user.profile.goal);
 
@@ -57,15 +137,37 @@ export function MealPlan() {
     setWorking(true);
     try {
       const result = plan
-        ? await mealPlanApi.regenerate(plan.id, mealSplit)
-        : await mealPlanApi.generate(selectedDate, mealSplit);
+        ? await mealPlanApi.regenerate(plan.id, mealSplit, { main_meals: mainMeals, side_meals: sideMeals })
+        : await mealPlanApi.generate(selectedDate, mealSplit, { main_meals: mainMeals, side_meals: sideMeals });
       setPlans((current) => [...current, result.data]);
       setVersionId(result.data.id);
-      toast.success(plan ? `Đã tạo phiên bản ${result.data.version}; bản cũ vẫn được lưu.` : 'Đã tạo và lưu thực đơn 3 bữa.');
+      const generatedMainMeals = result.data.meals.filter((item) => item.meal_type !== 'snack').length;
+      const generatedSideMeals = result.data.meals.filter((item) => item.meal_type === 'snack').length;
+      if (generatedMainMeals !== mainMeals || generatedSideMeals !== sideMeals) {
+        toast.error(`Backend hiện chỉ trả ${generatedMainMeals} bữa chính và ${generatedSideMeals} bữa phụ. Hãy khởi động lại backend rồi tạo phiên bản mới.`);
+      } else {
+        toast.success(plan ? `Đã tạo phiên bản ${result.data.version}; bản cũ vẫn được lưu.` : 'Đã tạo và lưu thực đơn.');
+      }
     } catch (cause) {
       toast.error(toApiError(cause).message);
     } finally {
       setWorking(false);
+    }
+  };
+
+  const markCooked = async (dish: MealPlanDish) => {
+    if (!dish.id || cookingIds.includes(dish.id)) return;
+    setCookingIds((ids) => [...ids, dish.id!]);
+    try {
+      const result = await mealPlanApi.setCooked(dish.id, !dish.is_cooked);
+      setPlans((all) => all.map((savedPlan) => savedPlan.id === plan?.id
+        ? { ...savedPlan, meals: savedPlan.meals.map((item) => item.id === dish.id ? { ...item, is_cooked: result.is_cooked } : item) }
+        : savedPlan));
+      toast.success(result.is_cooked ? 'Đã xác nhận nấu món này.' : 'Đã bỏ xác nhận món đã nấu.');
+    } catch (cause) {
+      toast.error(toApiError(cause).message);
+    } finally {
+      setCookingIds((ids) => ids.filter((id) => id !== dish.id));
     }
   };
 
@@ -101,12 +203,22 @@ export function MealPlan() {
             <div>
               <p className="text-sm capitalize text-muted">{formatLongDate(selectedDate)}</p>
               <h2 className="mt-1 text-xl font-semibold">{plan ? `Phiên bản ${plan.version}` : 'Chưa có thực đơn'}</h2>
-              {plan && <p className="mt-1 text-sm text-muted">Tổng {fmt(plan.total_calories)} / {fmt(plan.target_calories)} kcal tham khảo</p>}
+              {plan && <p className="mt-1 text-sm text-muted">Tổng trong ngày {fmt(dailyNutrition.calories)} / {fmt(plan.target_calories)} kcal mục tiêu (đã tính phần tinh bột chọn thêm)</p>}
             </div>
             <button onClick={createOrRegenerate} disabled={working} className="btn-primary h-11">
               {working ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : plan ? <RefreshCwIcon className="h-4 w-4" /> : <SparklesIcon className="h-4 w-4" />}
-              {plan ? 'Tạo phiên bản mới' : 'Tạo thực đơn 3 bữa'}
+              {plan ? 'Tạo phiên bản mới' : 'Tạo thực đơn'}
             </button>
+          </section>
+
+          <section className="card flex flex-wrap items-end gap-4 p-5">
+            <label className="grid gap-1 text-sm font-medium">Số bữa chính
+              <select className="input" value={mainMeals} onChange={(event) => setMainMeals(Number(event.target.value))}>{Array.from({ length: 9 }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count} bữa</option>)}</select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium">Số bữa phụ
+              <select className="input" value={sideMeals} onChange={(event) => setSideMeals(Number(event.target.value))}>{Array.from({ length: 7 }, (_, index) => index).map((count) => <option key={count} value={count}>{count} bữa</option>)}</select>
+            </label>
+            <p className="pb-2 text-sm text-muted">Áp dụng khi tạo phiên bản thực đơn mới.</p>
           </section>
 
           {plans.length > 1 && (
@@ -120,20 +232,60 @@ export function MealPlan() {
 
           {plan ? (
             <>
-              <section className="grid gap-4 lg:grid-cols-3">
-                {meals.map((meal) => {
-                  const dishes = plan.meals.filter((item) => item.meal_type === meal.key);
-                  return <MealCard key={meal.key} label={meal.label} hint={meal.hint} dishes={dishes} onSelectDish={setSelectedDish} />;
-                })}
-              </section>
+              {(() => {
+                const orderedDishes = displayedMeals;
+                const mainSlots = Array.from({ length: mainMeals }, (_, index) => ({
+                  key: `main-${index}`,
+                  type: meals[index % meals.length].key,
+                  label: `${meals[index % meals.length].label}${index >= meals.length ? ` ${Math.floor(index / meals.length) + 1}` : ''}`,
+                  hint: meals[index % meals.length].hint,
+                }));
+                const slots = [...mainSlots, ...Array.from({ length: sideMeals }, (_, index) => ({ key: `snack-${index}`, type: 'snack', label: `Bữa phụ ${index + 1}`, hint: snackMeal.hint }))];
+                return <section className="grid gap-4 lg:grid-cols-3">
+                  {slots.map((slot, index) => {
+                    const dish = orderedDishes[index];
+                    return <MealCard key={slot.key} label={slot.label} hint={slot.hint} dishes={dish ? [dish] : []} onSelectDish={setSelectedDish} onMarkCooked={markCooked} cookingIds={cookingIds} />;
+                  })}
+                </section>;
+              })()}
               <section className="card p-5 sm:p-6">
                 <h2 className="font-semibold">Tổng dinh dưỡng đã lưu</h2>
                 <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <Total label="Năng lượng" value={`${fmt(plan.total_calories)} kcal`} />
-                  <Total label="Protein" value={`${fmt(plan.nutrition_totals.protein, 1)} g`} />
-                  <Total label="Carb" value={`${fmt(plan.nutrition_totals.carb, 1)} g`} />
-                  <Total label="Fat" value={`${fmt(plan.nutrition_totals.fat, 1)} g`} />
+                  <Total label="Tổng năng lượng cả ngày" value={`${fmt(dailyNutrition.calories)} kcal`} />
+                  <Total label="Protein cả ngày" value={`${fmt(dailyNutrition.protein, 1)} g`} />
+                  <Total label="Carb cả ngày" value={`${fmt(dailyNutrition.carb, 1)} g`} />
+                  <Total label="Fat cả ngày" value={`${fmt(dailyNutrition.fat, 1)} g`} />
                 </div>
+              </section>
+              <section className="card p-5 sm:p-6">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand"><SparklesIcon className="h-5 w-5" /></span>
+                  <div><h2 className="font-semibold">Gợi ý bổ sung tinh bột theo khẩu phần</h2><p className="mt-1 text-sm leading-6 text-muted">So sánh calo món đã có với mục tiêu từng bữa (sáng 25%, trưa 40%, tối 35%). Nếu còn thiếu đáng kể, gợi ý chỉ bù một phần bằng tinh bột để vẫn chừa chỗ cho đạm và rau.</p></div>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  {starchAdvice.map((advice) => <article key={advice.mealType} className="rounded-2xl border border-line bg-surface/50 p-4">
+                    <h3 className="font-semibold">{meals.find((meal) => meal.key === advice.mealType)?.label}</h3>
+                    {advice.options.length ? <>
+                      <p className="mt-2 text-sm text-muted">Còn khoảng {fmt(advice.remaining)} kcal theo mục tiêu bữa. Phần tinh bột gợi ý bù khoảng {fmt(advice.addKcal)} kcal:</p>
+                      <ul className="mt-3 space-y-2">{advice.options.map((option) => {
+                        const choiceKey = `${plan.id}:${advice.mealType}`;
+                        const chosen = starchChoices[choiceKey]?.name === option.name;
+                        return <li key={option.name} className={`rounded-xl border p-3 text-sm ${chosen ? 'border-brand bg-brand-soft/50' : 'border-line bg-white'}`}>
+                          <p className="font-semibold text-brand">{option.name}: {option.grams} g · khoảng {option.portionText}</p>
+                          <p className="mt-1 text-xs text-muted">~{option.calories} kcal · {option.carb} g carb</p>
+                          <button type="button" aria-pressed={chosen} onClick={() => setStarchChoices((current) => {
+                            const next = { ...current };
+                            if (next[choiceKey]?.name === option.name) delete next[choiceKey];
+                            else next[choiceKey] = { name: option.name, grams: option.grams, calories: option.calories, carb: option.carb };
+                            return next;
+                          })} className={`mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold ${chosen ? 'bg-brand text-white' : 'bg-surface text-brand hover:bg-brand-soft'}`}>{chosen ? 'Đã thêm · Bỏ chọn' : 'Chọn khẩu phần này'}</button>
+                        </li>;
+                      })}</ul>
+                    </> : <p className="mt-2 text-sm text-muted">{advice.remaining < 50 ? 'Bữa này đã gần mục tiêu năng lượng; chưa cần gợi ý thêm tinh bột.' : 'Không đủ dữ liệu để tính gợi ý.'}</p>}
+                  </article>)}
+                </div>
+                {selectedAdditions.length > 0 && <p className="mt-4 rounded-xl bg-brand-soft/50 p-3 text-sm text-brand">Đã chọn thêm {selectedAdditions.map((item) => `${item.name} ${item.grams} g`).join(' · ')}. Tổng ngày hiện tại: {fmt(dailyNutrition.calories)} kcal, {fmt(dailyNutrition.carb, 1)} g carb.</p>}
+                <p className="mt-4 text-xs leading-5 text-muted">Khối lượng là thực phẩm đã nấu chín; 1 chén cơm gạt ngang quy ước khoảng 150 g, 1 tô cháo nhỏ khoảng 250 g. Dinh dưỡng là ước tính tham khảo, thay đổi theo cách nấu và kích thước chén/tô. Chọn tối đa một lựa chọn cho mỗi bữa; lựa chọn được ghi nhớ trên thiết bị này. Gợi ý hiện dùng phân bổ mặc định 25/40/35.</p>
               </section>
               {plan.warnings.map((warning) => <p key={warning} className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-800">{warning}</p>)}
             </>
@@ -151,7 +303,7 @@ export function MealPlan() {
   );
 }
 
-function MealCard({label, hint, dishes, onSelectDish}: {label: string; hint: string; dishes: MealPlanDish[]; onSelectDish: (dish: MealPlanDish) => void}) {
+function MealCard({label, hint, dishes, onSelectDish, onMarkCooked, cookingIds}: {label: string; hint: string; dishes: MealPlanDish[]; onSelectDish: (dish: MealPlanDish) => void; onMarkCooked: (dish: MealPlanDish) => void; cookingIds: number[]}) {
   const calories = dishes.reduce((sum, dish) => sum + dish.calories, 0);
   return (
     <article className="card overflow-hidden">
@@ -161,13 +313,13 @@ function MealCard({label, hint, dishes, onSelectDish}: {label: string; hint: str
         <p className="mt-3 text-xl font-semibold tabular-nums">{fmt(calories)} <span className="text-sm font-normal text-muted">kcal</span></p>
       </div>
       <div className="divide-y divide-line">
-        {dishes.length ? dishes.map((dish) => <DishRow key={`${dish.position}-${dish.dish_id}`} dish={dish} onSelect={() => onSelectDish(dish)} />) : <p className="p-5 text-sm text-muted">Không có món trong bữa này.</p>}
+        {dishes.length ? dishes.map((dish) => <DishRow key={`${dish.position}-${dish.dish_id}`} dish={dish} onSelect={() => onSelectDish(dish)} onMarkCooked={() => onMarkCooked(dish)} busy={dish.id ? cookingIds.includes(dish.id) : true} />) : <p className="p-5 text-sm text-muted">Không có món trong bữa này.</p>}
       </div>
     </article>
   );
 }
 
-function DishRow({dish, onSelect}: {dish: MealPlanDish; onSelect: () => void}) {
+function DishRow({dish, onSelect, onMarkCooked, busy}: {dish: MealPlanDish; onSelect: () => void; onMarkCooked: () => void; busy: boolean}) {
   return (
     <div className="p-4">
       <DishImage src={dish.image_url} alt={dish.name} className="h-40 w-full rounded-xl object-cover" />
@@ -176,19 +328,21 @@ function DishRow({dish, onSelect}: {dish: MealPlanDish; onSelect: () => void}) {
           {dish.name}
         </button>
       </h3>
-      <p className="mt-1 text-sm text-muted">{fmt(dish.serving_grams, 1)} g · {fmt(dish.calories)} kcal</p>
+      <p className="mt-1 text-sm text-muted">{fmt(dish.serving_grams, 1)} g · {fmt(dish.calories)} kcal theo khẩu phần này</p>
       <p className="mt-2 text-xs text-muted">Protein {fmt(dish.protein, 1)} g · Carb {fmt(dish.carb, 1)} g · Fat {fmt(dish.fat, 1)} g</p>
       <p className="mt-3 text-xs leading-5 text-muted">{dish.reason}</p>
+      <button type="button" disabled={busy} onClick={onMarkCooked} className={`mt-3 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 ${dish.is_cooked ? 'bg-emerald-100 text-emerald-800' : 'bg-surface text-brand hover:bg-emerald-50'}`}>{busy ? 'Đang lưu…' : dish.is_cooked ? '✓ Đã nấu' : 'Xác nhận đã nấu'}</button>
     </div>
   );
 }
 
 function DishImage({src, alt, className}: {src: string | null; alt: string; className: string}) {
   const [failed, setFailed] = useState(false);
-  if (!src || failed) {
+  const imageUrl = resolveAssetUrl(src);
+  if (!imageUrl || failed) {
     return <div className={`${className} flex items-center justify-center bg-surface text-muted`} aria-label={`Chưa có ảnh: ${alt}`}><ImageIcon className="h-8 w-8" /></div>;
   }
-  return <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
+  return <img src={imageUrl} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
 }
 
 function DishDetails({dish, onClose}: {dish: MealPlanDish; onClose: () => void}) {
