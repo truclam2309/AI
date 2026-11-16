@@ -17,6 +17,8 @@ export const mealPlanApi = {
     }),
   setCooked: (itemId: number, isCooked: boolean) =>
     request<{id: number; is_cooked: boolean}>('PUT', `/meal-plans/items/${itemId}/cooked`, { body: { is_cooked: isCooked } }),
+  setConsumption: (itemId: number, consumedRatio: number) =>
+    request<{id: number; consumed_ratio: number}>('PUT', `/meal-plans/items/${itemId}/consumption`, { body: { consumed_ratio: consumedRatio } }),
   selectDish: (payload: {plan_date: string; meal_type: MealType; dish_id: string}) =>
     request<GeneratePlanResponse>('POST', '/meal-plans/select-dish', { body: payload, timeoutMs: 120000 }),
   history: (page = 1, pageSize = 20) =>

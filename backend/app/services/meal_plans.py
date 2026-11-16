@@ -207,6 +207,7 @@ def replace_meal_with_dish(
             image_url_snapshot=item.image_url_snapshot,
             meal_type=item.meal_type,
             serving_grams=item.serving_grams,
+            consumed_ratio=item.consumed_ratio,
             calories=item.calories,
             protein=item.protein,
             carb=item.carb,

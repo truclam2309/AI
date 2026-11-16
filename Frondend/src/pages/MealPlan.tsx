@@ -59,6 +59,7 @@ export function MealPlan() {
   const [mainMeals, setMainMeals] = useState(3);
   const [sideMeals, setSideMeals] = useState(0);
   const [cookingIds, setCookingIds] = useState<number[]>([]);
+  const [consumptionIds, setConsumptionIds] = useState<number[]>([]);
   const [starchChoices, setStarchChoices] = useState<Record<string, StarchChoice>>(readStarchChoices);
 
   useEffect(() => {
@@ -95,24 +96,18 @@ export function MealPlan() {
     () => plan ? [...plan.meals].sort((a, b) => a.position - b.position).slice(0, mainMeals + sideMeals) : [],
     [plan, mainMeals, sideMeals]
   );
-  const displayedNutrition = useMemo(() => displayedMeals.reduce((sum, dish) => ({
-    calories: sum.calories + dish.calories,
-    protein: sum.protein + dish.protein,
-    carb: sum.carb + dish.carb,
-    fat: sum.fat + dish.fat,
-  }), { calories: 0, protein: 0, carb: 0, fat: 0 }), [displayedMeals]);
   const selectedAdditions = useMemo(() => starchAdviceSelections(plan?.id, starchChoices), [plan?.id, starchChoices]);
   const dailyNutrition = useMemo(() => ({
-    calories: displayedNutrition.calories + selectedAdditions.reduce((sum, item) => sum + item.calories, 0),
-    protein: displayedNutrition.protein,
-    carb: displayedNutrition.carb + selectedAdditions.reduce((sum, item) => sum + item.carb, 0),
-    fat: displayedNutrition.fat,
-  }), [displayedNutrition, selectedAdditions]);
+    calories: (plan?.consumed_totals.calories ?? 0) + selectedAdditions.reduce((sum, item) => sum + item.calories, 0),
+    protein: plan?.consumed_totals.protein ?? 0,
+    carb: (plan?.consumed_totals.carb ?? 0) + selectedAdditions.reduce((sum, item) => sum + item.carb, 0),
+    fat: plan?.consumed_totals.fat ?? 0,
+  }), [plan?.consumed_totals, selectedAdditions]);
   const starchAdvice = useMemo(() => {
     if (!plan) return [];
     const split = { breakfast: 0.25, lunch: 0.40, dinner: 0.35 };
     return (['breakfast', 'lunch', 'dinner'] as const).map((mealType) => {
-      const mealCalories = displayedMeals.filter((dish) => dish.meal_type === mealType).reduce((sum, dish) => sum + dish.calories, 0);
+      const mealCalories = displayedMeals.filter((dish) => dish.meal_type === mealType).reduce((sum, dish) => sum + dish.calories * (dish.consumed_ratio ?? 0), 0);
       const remaining = Math.max(0, plan.target_calories * split[mealType] - mealCalories);
       // Use part of a meaningful energy gap for starch; retain room for protein,
       // vegetables and fat instead of filling every missing kcal with carbs.
@@ -171,6 +166,34 @@ export function MealPlan() {
     }
   };
 
+  const saveConsumption = async (dish: MealPlanDish, consumedRatio: number) => {
+    if (!dish.id || consumptionIds.includes(dish.id)) return;
+    setConsumptionIds((ids) => [...ids, dish.id!]);
+    try {
+      const result = await mealPlanApi.setConsumption(dish.id, consumedRatio);
+      setPlans((all) => all.map((savedPlan) => {
+        if (savedPlan.id !== plan?.id) return savedPlan;
+        const meals = savedPlan.meals.map((item) => item.id === dish.id
+          ? { ...item, consumed_ratio: result.consumed_ratio }
+          : item);
+        const consumed_totals = meals.reduce((totals, item) => {
+          const ratio = Math.min(1, Math.max(0, item.consumed_ratio ?? 0));
+          return {
+            calories: totals.calories + item.calories * ratio,
+            protein: totals.protein + item.protein * ratio,
+            carb: totals.carb + item.carb * ratio,
+            fat: totals.fat + item.fat * ratio,
+          };
+        }, { calories: 0, protein: 0, carb: 0, fat: 0 });
+        return { ...savedPlan, meals, consumed_totals };
+      }));
+    } catch (cause) {
+      toast.error(toApiError(cause).message);
+    } finally {
+      setConsumptionIds((ids) => ids.filter((id) => id !== dish.id));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -202,7 +225,7 @@ export function MealPlan() {
             <div>
               <p className="text-sm capitalize text-muted">{formatLongDate(selectedDate)}</p>
               <h2 className="mt-1 text-xl font-semibold">{plan ? `Phiên bản ${plan.version}` : 'Chưa có thực đơn'}</h2>
-              {plan && <p className="mt-1 text-sm text-muted">Tổng trong ngày {fmt(dailyNutrition.calories)} / {fmt(plan.target_calories)} kcal mục tiêu (đã tính phần tinh bột chọn thêm)</p>}
+              {plan && <p className="mt-1 text-sm text-muted">Đã ăn {fmt(dailyNutrition.calories)} / {fmt(plan.target_calories)} kcal mục tiêu (tính theo tỷ lệ từng món và phần tinh bột đã chọn)</p>}
             </div>
             <button onClick={createOrRegenerate} disabled={working} className="btn-primary h-11">
               {working ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : plan ? <RefreshCwIcon className="h-4 w-4" /> : <SparklesIcon className="h-4 w-4" />}
@@ -243,17 +266,17 @@ export function MealPlan() {
                 return <section className="grid gap-4 lg:grid-cols-3">
                   {slots.map((slot, index) => {
                     const dish = orderedDishes[index];
-                    return <MealCard key={slot.key} label={slot.label} hint={slot.hint} dishes={dish ? [dish] : []} onSelectDish={setSelectedDish} onMarkCooked={markCooked} cookingIds={cookingIds} />;
+                    return <MealCard key={slot.key} label={slot.label} hint={slot.hint} dishes={dish ? [dish] : []} onSelectDish={setSelectedDish} onMarkCooked={markCooked} cookingIds={cookingIds} onSaveConsumption={saveConsumption} consumptionIds={consumptionIds} />;
                   })}
                 </section>;
               })()}
               <section className="card p-5 sm:p-6">
-                <h2 className="font-semibold">Tổng dinh dưỡng đã lưu</h2>
+                <h2 className="font-semibold">Tổng dinh dưỡng đã ăn (ước tính)</h2>
                 <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <Total label="Tổng năng lượng cả ngày" value={`${fmt(dailyNutrition.calories)} kcal`} />
-                  <Total label="Protein cả ngày" value={`${fmt(dailyNutrition.protein, 1)} g`} />
-                  <Total label="Carb cả ngày" value={`${fmt(dailyNutrition.carb, 1)} g`} />
-                  <Total label="Fat cả ngày" value={`${fmt(dailyNutrition.fat, 1)} g`} />
+                  <Total label="Năng lượng đã ăn" value={`${fmt(dailyNutrition.calories)} kcal`} />
+                  <Total label="Protein đã ăn" value={`${fmt(dailyNutrition.protein, 1)} g`} />
+                  <Total label="Carb đã ăn" value={`${fmt(dailyNutrition.carb, 1)} g`} />
+                  <Total label="Fat đã ăn" value={`${fmt(dailyNutrition.fat, 1)} g`} />
                 </div>
               </section>
               <section className="card p-5 sm:p-6">
@@ -300,8 +323,8 @@ export function MealPlan() {
   );
 }
 
-function MealCard({label, hint, dishes, onSelectDish, onMarkCooked, cookingIds}: {label: string; hint: string; dishes: MealPlanDish[]; onSelectDish: (dish: MealPlanDish) => void; onMarkCooked: (dish: MealPlanDish) => void; cookingIds: number[]}) {
-  const calories = dishes.reduce((sum, dish) => sum + dish.calories, 0);
+function MealCard({label, hint, dishes, onSelectDish, onMarkCooked, cookingIds, onSaveConsumption, consumptionIds}: {label: string; hint: string; dishes: MealPlanDish[]; onSelectDish: (dish: MealPlanDish) => void; onMarkCooked: (dish: MealPlanDish) => void; cookingIds: number[]; onSaveConsumption: (dish: MealPlanDish, ratio: number) => void; consumptionIds: number[]}) {
+  const calories = dishes.reduce((sum, dish) => sum + dish.calories * (dish.consumed_ratio ?? 0), 0);
   return (
     <article className="card overflow-hidden">
       <div className="border-b border-line p-5">
@@ -310,13 +333,21 @@ function MealCard({label, hint, dishes, onSelectDish, onMarkCooked, cookingIds}:
         <p className="mt-3 text-xl font-semibold tabular-nums">{fmt(calories)} <span className="text-sm font-normal text-muted">kcal</span></p>
       </div>
       <div className="divide-y divide-line">
-        {dishes.length ? dishes.map((dish) => <DishRow key={`${dish.position}-${dish.dish_id}`} dish={dish} onSelect={() => onSelectDish(dish)} onMarkCooked={() => onMarkCooked(dish)} busy={dish.id ? cookingIds.includes(dish.id) : true} />) : <p className="p-5 text-sm text-muted">Không có món trong bữa này.</p>}
+        {dishes.length ? dishes.map((dish) => <DishRow key={`${dish.position}-${dish.dish_id}`} dish={dish} onSelect={() => onSelectDish(dish)} onMarkCooked={() => onMarkCooked(dish)} busy={dish.id ? cookingIds.includes(dish.id) : true} onSaveConsumption={(ratio) => onSaveConsumption(dish, ratio)} savingConsumption={dish.id ? consumptionIds.includes(dish.id) : true} />) : <p className="p-5 text-sm text-muted">Không có món trong bữa này.</p>}
       </div>
     </article>
   );
 }
 
-function DishRow({dish, onSelect, onMarkCooked, busy}: {dish: MealPlanDish; onSelect: () => void; onMarkCooked: () => void; busy: boolean}) {
+function DishRow({dish, onSelect, onMarkCooked, busy, onSaveConsumption, savingConsumption}: {dish: MealPlanDish; onSelect: () => void; onMarkCooked: () => void; busy: boolean; onSaveConsumption: (ratio: number) => void; savingConsumption: boolean}) {
+  const savedPercent = Math.round((dish.consumed_ratio ?? 0) * 100);
+  const [percent, setPercent] = useState(savedPercent);
+  useEffect(() => setPercent(savedPercent), [savedPercent]);
+  const savePercent = () => {
+    const value = Math.min(100, Math.max(0, Number.isFinite(percent) ? percent : 0));
+    setPercent(value);
+    if (value !== savedPercent) onSaveConsumption(value / 100);
+  };
   return (
     <div className="p-4">
       <DishImage src={dish.image_url} alt={dish.name} className="h-40 w-full rounded-xl object-cover" />
@@ -327,6 +358,19 @@ function DishRow({dish, onSelect, onMarkCooked, busy}: {dish: MealPlanDish; onSe
       </h3>
       <p className="mt-1 text-sm text-muted">{fmt(dish.serving_grams, 1)} g · {fmt(dish.calories)} kcal theo khẩu phần này</p>
       <p className="mt-2 text-xs text-muted">Protein {fmt(dish.protein, 1)} g · Carb {fmt(dish.carb, 1)} g · Fat {fmt(dish.fat, 1)} g</p>
+      <div className="mt-3 grid gap-2 rounded-xl bg-surface/70 p-3">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" checked={percent === 100} disabled={savingConsumption} onChange={(event) => { const value = event.target.checked ? 100 : 0; setPercent(value); onSaveConsumption(value / 100); }} />
+          Ăn hết khẩu phần
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted">
+          Tỷ lệ đã ăn
+          <input aria-label={`Tỷ lệ đã ăn món ${dish.name}`} type="number" min={0} max={100} step={1} value={percent} disabled={savingConsumption} onChange={(event) => setPercent(event.target.value === '' ? 0 : Number(event.target.value))} onBlur={(event) => { if ((event.relatedTarget as HTMLElement | null)?.getAttribute('type') !== 'checkbox') savePercent(); }} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} className="input h-9 w-24" />
+          %
+          {savingConsumption && <span className="text-xs">Đang lưu…</span>}
+        </label>
+        <p className="text-xs text-muted">Đã tính {fmt(dish.calories * savedPercent / 100)} kcal vào tổng ngày.</p>
+      </div>
       <button type="button" disabled={busy} onClick={onMarkCooked} className={`mt-3 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 ${dish.is_cooked ? 'bg-emerald-100 text-emerald-800' : 'bg-surface text-brand hover:bg-emerald-50'}`}>{busy ? 'Đang lưu…' : dish.is_cooked ? '✓ Đã nấu' : 'Xác nhận đã nấu'}</button>
     </div>
   );

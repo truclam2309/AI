@@ -91,6 +91,7 @@ class MealPlanItem(Base):
     image_url_snapshot: Mapped[str | None] = mapped_column(Text)
     meal_type: Mapped[str] = mapped_column(String(20))
     is_cooked: Mapped[bool] = mapped_column(default=False)
+    consumed_ratio: Mapped[float] = mapped_column(Float, default=0.0)
     serving_grams: Mapped[float] = mapped_column(Float)
     calories: Mapped[float] = mapped_column(Float)
     protein: Mapped[float] = mapped_column(Float)

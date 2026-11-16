@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..database import get_db
 from ..dependencies import current_user
 from ..models import DailyMealPlan, Dish, MealPlanItem, User
-from ..schemas import CookedInput, GenerateInput, SelectDishInput
+from ..schemas import ConsumptionInput, CookedInput, GenerateInput, SelectDishInput
 from ..services.meal_plans import create_meal_plan, replace_meal_with_dish
 from ..utils.time import local_today
 from ..utils.serialization import serialize_plan
@@ -36,6 +36,26 @@ def set_item_cooked(
     item.is_cooked = payload.is_cooked
     db.commit()
     return {"id": item.id, "is_cooked": item.is_cooked}
+
+
+@router.put("/items/{item_id}/consumption")
+def set_item_consumption(
+    item_id: int,
+    payload: ConsumptionInput,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    item = db.scalar(
+        select(MealPlanItem).join(DailyMealPlan).where(
+            MealPlanItem.id == item_id,
+            DailyMealPlan.user_id == user.id,
+        )
+    )
+    if item is None:
+        raise HTTPException(404, "Không tìm thấy món trong thực đơn của bạn.")
+    item.consumed_ratio = payload.consumed_ratio
+    db.commit()
+    return {"id": item.id, "consumed_ratio": item.consumed_ratio}
 
 
 @router.post("/select-dish", status_code=201)

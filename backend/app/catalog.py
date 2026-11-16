@@ -189,6 +189,17 @@ def read_catalog(path: Path) -> list[dict]:
         def number(key):
             value = pd.to_numeric(row[key], errors="coerce")
             return None if pd.isna(value) else float(value)
+        image_file = (
+            str(row["image_file"]).strip()
+            if "image_file" in df.columns and pd.notna(row["image_file"]) and str(row["image_file"]).strip()
+            else None
+        )
+        local_image = settings.data_dir / "hinh-anh-lam-net" / Path(image_file).name if image_file else None
+        workbook_image_url = (
+            str(row["image_url"]).strip()
+            if "image_url" in df.columns and pd.notna(row["image_url"]) and str(row["image_url"]).strip()
+            else None
+        )
         result.append({
             "id": str(row["dish_id"]), "source_code": str(row["source_code"]),
             "name": _repair_mojibake(str(row["name"])), "food_group": _repair_mojibake(str(row["food_group"])),
@@ -203,18 +214,16 @@ def read_catalog(path: Path) -> list[dict]:
                 if "instructions" in df.columns and pd.notna(row["instructions"]) and str(row["instructions"]).strip()
                 else None
             ),
-            "image_url": (
-                str(row["image_url"]).strip()
-                if "image_url" in df.columns and pd.notna(row["image_url"]) and str(row["image_url"]).strip()
-                else f"/images/{str(row['dish_id']).strip()}.jpg"
+            # Prefer the locally hosted sharpened asset when available. This
+            # also makes newly added image_file entries visible in the app.
+            "image_url": f"/images/{Path(image_file).name}" if local_image and local_image.is_file()
+            else workbook_image_url
+            or (
+                f"/images/{str(row['dish_id']).strip()}.jpg"
                 if (settings.data_dir / "hinh-anh-lam-net" / f"{str(row['dish_id']).strip()}.jpg").is_file()
                 else None
             ),
-            "image_file": (
-                str(row["image_file"]).strip()
-                if "image_file" in df.columns and pd.notna(row["image_file"]) and str(row["image_file"]).strip()
-                else None
-            ),
+            "image_file": image_file,
             "nutrition_label": labels_by_id.get(str(row["dish_id"])),
             "serving_g": number("serving_g"),
             "calories_per_100g": number("energy_kcal_per_100g"),

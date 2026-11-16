@@ -75,6 +75,10 @@ class CookedInput(BaseModel):
     is_cooked: bool
 
 
+class ConsumptionInput(BaseModel):
+    consumed_ratio: float = Field(ge=0, le=1)
+
+
 class IngredientSearchInput(BaseModel):
     ingredients: list[str] = Field(min_length=1, max_length=40)
     limit: int = Field(default=12, ge=1, le=50)

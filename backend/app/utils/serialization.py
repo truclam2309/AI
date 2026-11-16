@@ -77,6 +77,7 @@ def serialize_plan(plan: DailyMealPlan) -> dict:
                 "image_url": item.image_url_snapshot or (item.dish.image_url if item.dish else None),
                 "meal_type": item.meal_type,
                 "is_cooked": item.is_cooked,
+                "consumed_ratio": item.consumed_ratio,
                 "serving_grams": item.serving_grams,
                 "calories": item.calories,
                 "protein": item.protein,
@@ -91,5 +92,11 @@ def serialize_plan(plan: DailyMealPlan) -> dict:
             "protein": round(sum(item.protein for item in plan.items), 1),
             "carb": round(sum(item.carb for item in plan.items), 1),
             "fat": round(sum(item.fat for item in plan.items), 1),
+        },
+        "consumed_totals": {
+            "calories": round(sum(item.calories * item.consumed_ratio for item in plan.items), 1),
+            "protein": round(sum(item.protein * item.consumed_ratio for item in plan.items), 1),
+            "carb": round(sum(item.carb * item.consumed_ratio for item in plan.items), 1),
+            "fat": round(sum(item.fat * item.consumed_ratio for item in plan.items), 1),
         },
     }

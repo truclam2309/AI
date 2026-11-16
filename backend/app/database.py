@@ -35,6 +35,7 @@ def migrate_recipe_columns(database_engine=None) -> None:
             "instructions_snapshot": "TEXT",
             "image_url_snapshot": "TEXT",
             "is_cooked": "BOOLEAN NOT NULL DEFAULT 0",
+            "consumed_ratio": "FLOAT NOT NULL DEFAULT 0",
         },
         "user_profiles": {
             "full_name": "VARCHAR(160)",

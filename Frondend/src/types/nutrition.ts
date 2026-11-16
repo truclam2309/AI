@@ -75,6 +75,7 @@ export interface MealPlanDish {
   position: number;
   id?: number;
   is_cooked?: boolean;
+  consumed_ratio: number;
   reason: string;
 }
 
@@ -93,6 +94,7 @@ export interface DailyMealPlan {
   created_at: string;
   meals: MealPlanDish[];
   nutrition_totals: { protein: number; carb: number; fat: number };
+  consumed_totals: { calories: number; protein: number; carb: number; fat: number };
 }
 
 export interface GeneratePlanResponse {
