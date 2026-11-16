@@ -54,7 +54,7 @@ function toForm(profile?: Partial<UserProfile> | null): FormState {
   return {
     full_name: profile.full_name ?? '',
     date_of_birth: profile.date_of_birth ?? '',
-    height_cm: profile.height_cm?.toString() ?? '',
+    height_cm: profile.height_cm != null ? (profile.height_cm / 100).toString() : '',
     weight_kg: profile.weight_kg?.toString() ?? '',
     sex_for_calculation: profile.sex_for_calculation ?? 'female',
     activity_level: profile.activity_level ?? 'light',
@@ -72,7 +72,7 @@ function makePayload(form: FormState): ProfileUpdate {
   return {
     full_name: form.full_name.trim() || null,
     date_of_birth: form.date_of_birth || null,
-    height_cm: numeric(form.height_cm),
+    height_cm: numeric(form.height_cm) !== null ? numeric(form.height_cm)! * 100 : null,
     weight_kg: numeric(form.weight_kg),
     sex_for_calculation: form.sex_for_calculation,
     activity_level: form.activity_level,
@@ -161,7 +161,7 @@ export function Profile() {
                   <option value="female">Nữ</option><option value="male">Nam</option>
                 </select>
               </label>
-              <TextField label="Chiều cao" name="height_cm" type="number" min="80" max="260" step="0.1" suffix="cm"
+              <TextField label="Chiều cao" name="height_cm" type="number" min="1" max="2.5" step="0.01" placeholder="Ví dụ: 1.65" suffix="m"
                 value={form.height_cm} onChange={(event) => set('height_cm', event.target.value)} />
               <TextField label="Cân nặng hiện tại" name="weight_kg" type="number" min="20" max="500" step="0.1" suffix="kg"
                 value={form.weight_kg} onChange={(event) => set('weight_kg', event.target.value)} />

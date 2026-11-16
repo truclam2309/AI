@@ -2,33 +2,7 @@ export type SexForCalculation = 'male' | 'female';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 export type NutritionGoal = 'lose_weight' | 'gain_weight' | 'gain_muscle' | 'maintain_weight';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-export type NutritionHistoryItem = NutritionCalculation & { id: number; body_status?: BodyStatusPrediction; body_status_input?: BodyStatusRequest };
-
-export interface BodyStatusRequest {
-  'Giới tính': 'Nam' | 'Nữ';
-  'Tuổi': number;
-  'Chiều cao (m)': number;
-  'Cân nặng (kg)': number;
-  'Tiền sử gia đình thừa cân': 'Có' | 'Không';
-  'Thường ăn đồ nhiều calo': 'Có' | 'Không';
-  'Tần suất ăn rau (1-3)': number;
-  'Số bữa chính mỗi ngày': number;
-  'Ăn vặt giữa các bữa': 'Không bao giờ' | 'Thỉnh thoảng' | 'Thường xuyên' | 'Luôn luôn';
-  'Hút thuốc': 'Có' | 'Không';
-  'Lượng nước uống mỗi ngày (1-3)': number;
-  'Tần suất vận động (0-3)': number;
-  'Uống rượu bia': 'Không bao giờ' | 'Thỉnh thoảng' | 'Thường xuyên' | 'Luôn luôn';
-}
-
-export interface BodyStatusPrediction {
-  predicted_status: string;
-  confidence: number;
-  probabilities: Record<string, number>;
-  bmi: number;
-  suggested_goal: string;
-  model: string;
-  disclaimer: string;
-}
+export type NutritionHistoryItem = NutritionCalculation & { id: number };
 
 export interface UserProfile {
   full_name?: string | null;

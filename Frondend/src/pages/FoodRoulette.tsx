@@ -215,36 +215,41 @@ export function FoodRoulette() {
 
   if (!user) return <LoadingState label="Đang tải tài khoản..." />;
 
-  return <div className="-mx-4 -mt-5 min-h-[calc(100dvh-4rem)] overflow-hidden bg-[#fff6e9] px-4 pb-8 pt-6 text-[#52382d] sm:-mx-6 sm:px-6 lg:-mx-10 lg:-mt-10 lg:px-10 lg:pt-9">
-      <div className="pointer-events-none absolute left-0 top-24 h-56 w-56 -translate-x-1/2 rounded-full bg-[#ffdba5]/35 blur-2xl" />
-    <div className="pointer-events-none absolute right-0 top-56 h-64 w-64 translate-x-1/3 rounded-full bg-[#ffc5a6]/30 blur-2xl" />
+  return <div className="-mx-4 -mt-5 min-h-[calc(100dvh-4rem)] overflow-hidden bg-canvas px-4 pb-8 pt-6 text-ink sm:-mx-6 sm:px-6 lg:-mx-10 lg:-mt-10 lg:px-10 lg:pt-9">
+      <div className="pointer-events-none absolute left-0 top-24 h-56 w-56 -translate-x-1/2 rounded-full bg-[#F8E6DA]/35 blur-2xl" />
+    <div className="pointer-events-none absolute right-0 top-56 h-64 w-64 translate-x-1/3 rounded-full bg-[#F8E6DA]/30 blur-2xl" />
     <header className="relative mx-auto max-w-4xl text-center">
-      <p className="flex items-center justify-center gap-2 text-xs font-black tracking-[0.28em] text-[#ac5336] sm:text-sm"><ChefHatIcon className="h-4 w-4" /> EM THÍCH ĂN GÌ? <StarIcon className="h-3.5 w-3.5 fill-[#efb84c] text-[#efb84c]" /></p>
-      <h1 className="mt-2 font-serif text-5xl font-black tracking-tight text-[#c64f35] drop-shadow-[0_2px_0_rgba(255,255,255,0.8)] sm:text-7xl">EM HỔNG BIẾT</h1>
-      <p className="mt-2 text-sm text-[#806b59] sm:text-base">Hôm nay ăn gì? Để vòng quay quyết!</p>
-      <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#edd9ba] bg-white/80 px-4 py-2 text-xs font-semibold text-[#76543e] shadow-sm sm:text-sm"><SparklesIcon className="h-4 w-4 text-[#d46842]" />{goal ? <>Điểm phù hợp đang tính theo mục tiêu: <span className="font-black text-[#c45232]">{GOALS[goal]}</span></> : <>Đang xem tất cả món ăn; chọn mục tiêu để xem điểm phù hợp</>}</div>
+      <p className="flex items-center justify-center gap-2 text-xs font-black tracking-[0.28em] text-[#1F5136] sm:text-sm"><ChefHatIcon className="h-4 w-4" /> EM THÍCH ĂN GÌ? <StarIcon className="h-3.5 w-3.5 fill-[#C98F12] text-[#C98F12]" /></p>
+      <h1 className="mt-2 font-sans text-4xl font-bold leading-tight tracking-tight text-[#C4521F] sm:text-5xl lg:text-6xl">EM HỔNG BIẾT</h1>
+      <p className="mt-2 text-sm text-[#1F5136] sm:text-base">Hôm nay ăn gì? Để vòng quay quyết!</p>
+      <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#F8E6DA] bg-white/80 px-4 py-2 text-xs font-semibold text-[#1F5136] shadow-sm sm:text-sm"><SparklesIcon className="h-4 w-4 text-[#C4521F]" />{goal ? <>Điểm phù hợp đang tính theo mục tiêu: <span className="font-black text-[#C4521F]">{GOALS[goal]}</span></> : <>Đang xem tất cả món ăn; chọn mục tiêu để xem điểm phù hợp</>}</div>
     </header>
 
-    <section className="relative mx-auto mt-5 flex max-w-3xl flex-wrap items-center justify-center gap-2 rounded-3xl border border-[#eddcc5] bg-white/85 p-3 shadow-sm sm:mt-6 sm:p-4">
-      <span className="px-2 text-xs font-bold text-[#76543e] sm:text-sm">Chấm điểm theo:</span>
-      <button type="button" aria-pressed={goal === null} onClick={() => setGoal(null)} className={`rounded-full px-3 py-2 text-xs font-bold transition sm:text-sm ${goal === null ? 'bg-[#d85e3b] text-white shadow' : 'bg-[#fff3df] text-[#76543e] hover:bg-[#f8e5c8]'}`}>Tất cả món</button>
-      {(Object.keys(GOALS) as NutritionGoal[]).map((value) => <button key={value} type="button" aria-pressed={goal === value} onClick={() => setGoal(value)} className={`rounded-full px-3 py-2 text-xs font-bold transition sm:text-sm ${goal === value ? 'bg-[#d85e3b] text-white shadow' : 'bg-[#fff3df] text-[#76543e] hover:bg-[#f8e5c8]'}`}>{GOALS[value]}</button>)}
+    <section className="relative mx-auto mt-5 flex max-w-3xl flex-wrap items-center justify-center gap-2 rounded-3xl border border-[#F8E6DA] bg-white/85 p-3 shadow-sm sm:mt-6 sm:p-4">
+      <span className="px-2 text-xs font-bold text-[#1F5136] sm:text-sm">Chấm điểm theo:</span>
+      <button type="button" aria-pressed={goal === null} onClick={() => setGoal(null)} className={`rounded-full px-3 py-2 text-xs font-bold transition sm:text-sm ${goal === null ? 'bg-[#C4521F] text-white shadow' : 'bg-[#F6F3EC] text-[#1F5136] hover:bg-[#F6F3EC]'}`}>Tất cả món</button>
+      {(Object.keys(GOALS) as NutritionGoal[]).map((value) => <button key={value} type="button" aria-pressed={goal === value} onClick={() => setGoal(value)} className={`rounded-full px-3 py-2 text-xs font-bold transition sm:text-sm ${goal === value ? 'bg-[#C4521F] text-white shadow' : 'bg-[#F6F3EC] text-[#1F5136] hover:bg-[#F6F3EC]'}`}>{GOALS[value]}</button>)}
     </section>
 
-    {loading ? <div className="mx-auto mt-8 max-w-xl"><LoadingState label="Đang tải món từ MyFit..." /></div> : error ? <section role="alert" className="mx-auto mt-8 max-w-xl rounded-3xl border border-red-200 bg-white p-6 text-center"><p className="font-semibold text-red-700">Chưa tải được món ăn</p><p className="mt-2 text-sm text-red-600">{error}</p><button type="button" onClick={() => setReloadVersion((version) => version + 1)} className="mt-4 rounded-full bg-[#d65d3d] px-5 py-2 text-sm font-bold text-white">Thử lại</button></section> : dishes.length === 0 ? <section className="mx-auto mt-8 max-w-xl rounded-3xl border border-[#eddcc5] bg-white/90 p-7 text-center shadow-sm"><ChefHatIcon className="mx-auto h-9 w-9 text-[#ce6742]" /><h2 className="mt-3 font-serif text-xl font-bold">Không có món khớp bộ lọc này</h2><p className="mt-2 text-sm leading-6 text-[#806e5f]">Thử chọn mục tiêu khác hoặc xem tất cả món.</p></section> : <>
+    {loading ? <div className="mx-auto mt-8 max-w-xl"><LoadingState label="Đang tải món từ MyFit..." /></div> : error ? <section role="alert" className="mx-auto mt-8 max-w-xl rounded-3xl border border-red-200 bg-white p-6 text-center"><p className="font-semibold text-red-700">Chưa tải được món ăn</p><p className="mt-2 text-sm text-red-600">{error}</p><button type="button" onClick={() => setReloadVersion((version) => version + 1)} className="mt-4 rounded-full bg-[#C4521F] px-5 py-2 text-sm font-bold text-white">Thử lại</button></section> : dishes.length === 0 ? <section className="mx-auto mt-8 max-w-xl rounded-3xl border border-[#F8E6DA] bg-white/90 p-7 text-center shadow-sm"><ChefHatIcon className="mx-auto h-9 w-9 text-[#C4521F]" /><h2 className="mt-3 font-sans text-xl font-bold">Không có món khớp bộ lọc này</h2><p className="mt-2 text-sm leading-6 text-[#5F6B63]">Thử chọn mục tiêu khác hoặc xem tất cả món.</p></section> : <>
       <div className="relative mx-auto mt-5 max-w-3xl sm:mt-7">
         <div className="relative mx-auto w-fit">
           <RouletteWheel dishes={visibleDishes} rotation={rotation} spinning={spinning} onTransitionEnd={finishSpin} />
           <AIChefMascot goal={goal ?? profileGoal ?? 'maintain_weight'} remainingCalories={remainingCalories} />
         </div>
-        <p className="mt-2 text-center text-xs font-medium text-[#927966]">{eligibleDishes.length} món trong catalog · {visibleDishes.length} món trên vòng quay · điểm % là xác suất Random Forest dự đoán lớp mục tiêu</p>
+        <p className="mt-2 text-center text-xs font-medium text-[#C4521F]">{eligibleDishes.length} món trong catalog · {visibleDishes.length} món trên vòng quay · điểm % là xác suất Random Forest dự đoán lớp mục tiêu</p>
       </div>
 
-      {featuredDish && <section className="relative mx-auto mt-6 max-w-3xl rounded-3xl border border-[#ecd9bd] bg-white/95 p-5 shadow-[0_12px_32px_rgba(104,69,42,0.08)] sm:p-7" aria-labelledby="roulette-recipe-title">
+      <div className="relative mx-auto mt-4 flex max-w-sm flex-col items-center gap-2">
+        <button type="button" onClick={startSpin} disabled={spinning || visibleDishes.length < 2} className="group inline-flex h-14 w-full items-center justify-center gap-3 rounded-full bg-gradient-to-b from-[#C4521F] to-[#C4521F] text-lg font-black tracking-[0.12em] text-white shadow-[0_7px_0_#1F5136,0_12px_22px_rgba(204,81,47,0.26)] transition hover:-translate-y-0.5 hover:shadow-[0_9px_0_#1F5136,0_15px_25px_rgba(204,81,47,0.3)] active:translate-y-1 active:shadow-[0_3px_0_#1F5136] disabled:cursor-not-allowed disabled:opacity-55"><RotateCwIcon className={`h-5 w-5 ${spinning ? 'animate-spin' : 'transition-transform group-hover:rotate-45'}`} />{spinning ? 'ĐANG QUAY...' : 'QUAY!'}</button>
+        {eligibleDishes.length < 2 && <p className="text-center text-xs text-[#C4521F]">Chọn ít nhất 2 món hợp mục tiêu để bắt đầu.</p>}
+      </div>
+
+      {featuredDish && <section className="relative mx-auto mt-6 max-w-3xl rounded-3xl border border-[#F8E6DA] bg-white/95 p-5 shadow-[0_12px_32px_rgba(104,69,42,0.08)] sm:p-7" aria-labelledby="roulette-recipe-title">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><p className="text-xs font-black uppercase tracking-[0.16em] text-[#c45b39]">{winner?.dish_id === featuredDish.dish_id ? 'Món được chọn' : 'Công thức trên vòng quay'}</p><h2 id="roulette-recipe-title" className="mt-1 font-serif text-2xl font-bold text-[#563a2e]">{featuredDish.name}</h2></div>
-          {featuredDish.goal_fit_percent != null && <span className="rounded-full bg-[#e7f3e8] px-3 py-1.5 text-sm font-bold text-[#28623c]">Phù hợp mục tiêu {featuredDish.goal_fit_percent.toFixed(1)}%</span>}
-          {featuredDish.calories != null && <span className="rounded-full bg-[#fff1dc] px-3 py-1.5 text-sm font-bold text-[#a64d31]">{fmt(featuredDish.calories, 1)} kcal</span>}
+          <div><p className="text-xs font-black uppercase tracking-[0.16em] text-[#C4521F]">{winner?.dish_id === featuredDish.dish_id ? 'Món được chọn' : 'Công thức trên vòng quay'}</p><h2 id="roulette-recipe-title" className="mt-1 font-sans text-2xl font-bold text-[#1F5136]">{featuredDish.name}</h2></div>
+          {featuredDish.goal_fit_percent != null && <span className="rounded-full bg-[#F6F3EC] px-3 py-1.5 text-sm font-bold text-[#1F5136]">Phù hợp mục tiêu {featuredDish.goal_fit_percent.toFixed(1)}%</span>}
+          {featuredDish.calories != null && <span className="rounded-full bg-[#F6F3EC] px-3 py-1.5 text-sm font-bold text-[#1F5136]">{fmt(featuredDish.calories, 1)} kcal</span>}
         </div>
         <div className="mt-4 grid gap-5 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
           <div className="grid grid-cols-2 gap-2 self-start">
@@ -254,43 +259,41 @@ export function FoodRoulette() {
             <RecipeMetric label="Khẩu phần" value={featuredDish.serving_grams} unit="g" />
           </div>
           <div className="space-y-4">
-            <section className="rounded-2xl border border-[#f0e3d1] bg-[#fffaf3] p-4"><h3 className="text-sm font-bold text-[#604638]">Nguyên liệu</h3>{featuredDish.ingredients.length ? <ul className="mt-2 space-y-2">{featuredDish.ingredients.map((ingredient, index) => <li key={`${index}-${ingredient}`} className="flex items-start gap-2 text-sm leading-5 text-[#806d5d]"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#d9774f]" /><span>{ingredient}</span></li>)}</ul> : <p className="mt-2 text-sm text-[#806d5d]">Chưa có dữ liệu nguyên liệu cho món này.</p>}</section>
-            <section className="rounded-2xl border border-[#f0e3d1] bg-[#fffaf3] p-4"><h3 className="text-sm font-bold text-[#604638]">Cách chế biến</h3>{recipeSteps(featuredDish.instructions).length ? <ol className="mt-3 space-y-3">{recipeSteps(featuredDish.instructions).map((step, index) => <li key={`${index}-${step}`} className="flex items-start gap-3 text-sm leading-6 text-[#806d5d]"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#f7e2c7] text-xs font-black text-[#a95435]">{index + 1}</span><span className="pt-0.5">{step}</span></li>)}</ol> : <p className="mt-2 text-sm text-[#806d5d]">Chưa có hướng dẫn chế biến cho món này.</p>}</section>
+            <section className="rounded-2xl border border-[#F6F3EC] bg-[#FFFFFF] p-4"><h3 className="text-sm font-bold text-[#1F5136]">Nguyên liệu</h3>{featuredDish.ingredients.length ? <ul className="mt-2 space-y-2">{featuredDish.ingredients.map((ingredient, index) => <li key={`${index}-${ingredient}`} className="flex items-start gap-2 text-sm leading-5 text-[#5F6B63]"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#C4521F]" /><span>{ingredient}</span></li>)}</ul> : <p className="mt-2 text-sm text-[#5F6B63]">Chưa có dữ liệu nguyên liệu cho món này.</p>}</section>
+            <section className="rounded-2xl border border-[#F6F3EC] bg-[#FFFFFF] p-4"><h3 className="text-sm font-bold text-[#1F5136]">Cách chế biến</h3>{recipeSteps(featuredDish.instructions).length ? <ol className="mt-3 space-y-3">{recipeSteps(featuredDish.instructions).map((step, index) => <li key={`${index}-${step}`} className="flex items-start gap-3 text-sm leading-6 text-[#5F6B63]"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#F6F3EC] text-xs font-black text-[#1F5136]">{index + 1}</span><span className="pt-0.5">{step}</span></li>)}</ol> : <p className="mt-2 text-sm text-[#5F6B63]">Chưa có hướng dẫn chế biến cho món này.</p>}</section>
           </div>
         </div>
-        <div className="mt-5 flex flex-col gap-3 border-t border-[#f0e5d6] pt-4 sm:flex-row sm:items-end sm:justify-between">
-          <label className="text-xs font-semibold text-[#806b59]">Thêm vào bữa
-            <select value={mealType} onChange={(event) => setMealType(event.target.value as MealType)} className="mt-1.5 block h-10 w-full rounded-xl border border-[#e8d7c0] bg-[#fffaf2] px-3 text-sm text-[#563a2e] outline-none focus:border-[#d4774d] sm:w-48">
+        <div className="mt-5 flex flex-col gap-3 border-t border-[#F6F3EC] pt-4 sm:flex-row sm:items-end sm:justify-between">
+          <label className="text-xs font-semibold text-[#1F5136]">Thêm vào bữa
+            <select value={mealType} onChange={(event) => setMealType(event.target.value as MealType)} className="mt-1.5 block h-10 w-full rounded-xl border border-[#F8E6DA] bg-[#FFFFFF] px-3 text-sm text-[#1F5136] outline-none focus:border-[#C4521F] sm:w-48">
               <option value="breakfast">Bữa sáng</option><option value="lunch">Bữa trưa</option><option value="dinner">Bữa tối</option><option value="snack">Bữa phụ</option>
             </select>
           </label>
-          <button type="button" onClick={() => addToMealPlan(featuredDish)} disabled={savingDishId === featuredDish.dish_id} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#1f563b] px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#17452f] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
+          <button type="button" onClick={() => addToMealPlan(featuredDish)} disabled={savingDishId === featuredDish.dish_id} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#1F5136] px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#1F5136] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
             {savingDishId === featuredDish.dish_id ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : <SparklesIcon className="h-4 w-4" />}{savingDishId === featuredDish.dish_id ? 'Đang thêm...' : 'Chọn món vào thực đơn'}
           </button>
         </div>
       </section>}
 
       <div className="relative mx-auto mt-4 flex max-w-sm flex-col items-center gap-3 sm:mt-5">
-        <button type="button" onClick={startSpin} disabled={spinning || visibleDishes.length < 2} className="group inline-flex h-14 w-full items-center justify-center gap-3 rounded-full bg-gradient-to-b from-[#ee7b4c] to-[#d84f32] text-lg font-black tracking-[0.12em] text-white shadow-[0_7px_0_#a73f2b,0_12px_22px_rgba(204,81,47,0.26)] transition hover:-translate-y-0.5 hover:shadow-[0_9px_0_#a73f2b,0_15px_25px_rgba(204,81,47,0.3)] active:translate-y-1 active:shadow-[0_3px_0_#a73f2b] disabled:cursor-not-allowed disabled:opacity-55"><RotateCwIcon className={`h-5 w-5 ${spinning ? 'animate-spin' : 'transition-transform group-hover:rotate-45'}`} />{spinning ? 'ĐANG QUAY...' : 'QUAY!'}</button>
-        {eligibleDishes.length < 2 && <p className="text-center text-xs text-[#b54f36]">Chọn ít nhất 2 món hợp mục tiêu để bắt đầu.</p>}
         <div className="grid w-full grid-cols-3 gap-2.5">
           <ActionButton icon={<PencilLineIcon className="h-4 w-4" />} label="Sửa món" disabled={spinning || dishes.length === 0} onClick={() => setEditing(true)} />
           <ActionButton icon={<SparklesIcon className="h-4 w-4" />} label="Bốc món" disabled={spinning || dishes.length < 1} onClick={chooseRandom} />
           <ActionButton icon={<DicesIcon className="h-4 w-4" />} label="Món khác" disabled={spinning || eligibleDishes.length <= 8} onClick={changeWheel} />
         </div>
-        {eligibleDishes.length > 0 && <p className="text-center text-[11px] text-[#957f6a]">Lựa chọn của bạn được lưu trên thiết bị và dùng lại cho mục tiêu này.</p>}
+        {eligibleDishes.length > 0 && <p className="text-center text-[11px] text-[#C4521F]">Lựa chọn của bạn được lưu trên thiết bị và dùng lại cho mục tiêu này.</p>}
       </div>
     </>}
 
     {editing && <FoodSelectorModal dishes={dishes} selectedIds={selectedIds} onSelectionChange={updateSelection} onClose={() => setEditing(false)} />}
-    {winner && <RouletteResult dish={winner} onClose={() => setWinner(null)} onRecipe={() => { setWinner(null); setFeaturedDishId(winner.dish_id); }} onSpinAgain={() => { setWinner(null); window.setTimeout(startSpin, 80); }} />}
+    {winner && <RouletteResult dish={winner} onClose={() => setWinner(null)} />}
   </div>;
 }
 
 function RecipeMetric({label, value, unit = 'g'}: {label: string; value: number | null; unit?: string}) {
-  return <div className="rounded-2xl bg-[#f8f0e5] px-3 py-2.5"><p className="text-[11px] text-[#907a66]">{label}</p><p className="mt-0.5 text-sm font-bold tabular-nums text-[#573b2e]">{value == null ? 'Chưa có dữ liệu' : `${fmt(value, 1)} ${unit}`}</p></div>;
+  return <div className="rounded-2xl bg-[#F6F3EC] px-3 py-2.5"><p className="text-[11px] text-[#C4521F]">{label}</p><p className="mt-0.5 text-sm font-bold tabular-nums text-[#1F5136]">{value == null ? 'Chưa có dữ liệu' : `${fmt(value, 1)} ${unit}`}</p></div>;
 }
 
 function ActionButton({icon, label, onClick, disabled}: {icon: ReactNode; label: string; onClick: () => void; disabled: boolean}) {
-  return <button type="button" onClick={onClick} disabled={disabled} className="flex h-12 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[#eddcc5] bg-white/90 text-[11px] font-bold text-[#704f3c] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#fff0dd] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-row sm:gap-2 sm:text-sm">{icon}{label}</button>;
+  return <button type="button" onClick={onClick} disabled={disabled} className="flex h-12 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[#F8E6DA] bg-white/90 text-[11px] font-bold text-[#1F5136] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F6F3EC] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-row sm:gap-2 sm:text-sm">{icon}{label}</button>;
 }

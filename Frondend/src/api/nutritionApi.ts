@@ -1,4 +1,4 @@
-import { BodyStatusPrediction, BodyStatusRequest, NutritionCalculation, NutritionHistoryItem, ProfileUpdate } from '../types/nutrition';
+import { NutritionCalculation, NutritionHistoryItem, ProfileUpdate } from '../types/nutrition';
 import { request } from './client';
 
 export const nutritionApi = {
@@ -10,10 +10,8 @@ export const nutritionApi = {
     );
     return result.data;
   },
-  save: async (bodyStatusInput?: BodyStatusRequest) => (await request<{data: NutritionHistoryItem}>(
-    'POST', '/nutrition/history', bodyStatusInput ? {body: {body_status_input: bodyStatusInput}} : {}
+  save: async () => (await request<{data: NutritionHistoryItem}>(
+    'POST', '/nutrition/history'
   )).data,
-  history: async () => (await request<{data: NutritionHistoryItem[]}>('GET', '/nutrition/history')).data,
-  predictBodyStatus: async (payload: BodyStatusRequest) =>
-    (await request<{data: BodyStatusPrediction}>('POST', '/nutrition/body-status', { body: payload })).data
+  history: async () => (await request<{data: NutritionHistoryItem[]}>('GET', '/nutrition/history')).data
 };

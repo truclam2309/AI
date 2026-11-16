@@ -5,7 +5,7 @@ export default {content: [
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Be Vietnam Pro"', 'system-ui', 'sans-serif'],
+        sans: ['Arial', '"Be Vietnam Pro"', 'system-ui', 'sans-serif'],
       },
       colors: {
         canvas: '#F6F3EC',

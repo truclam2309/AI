@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { CalendarDaysIcon, ChartPieIcon, ChefHatIcon, CircleUserRoundIcon, HouseIcon, LayoutDashboardIcon, LeafIcon, LogOutIcon, SearchIcon, SparklesIcon, UserRoundIcon, UtensilsIcon } from 'lucide-react';
+import { CalendarDaysIcon, ChefHatIcon, CircleUserRoundIcon, HouseIcon, LayoutDashboardIcon, LeafIcon, LogOutIcon, SearchIcon, SparklesIcon, UserRoundIcon, UtensilsIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const navItems = [
@@ -8,7 +8,6 @@ const navItems = [
 { to: '/menu', label: 'Menu món ăn', short: 'Menu', Icon: UtensilsIcon, end: false },
 { to: '/roulette', label: 'Vòng quay món ăn', short: 'Vòng quay', Icon: ChefHatIcon, end: false },
 { to: '/meal-plan', label: 'Thực đơn', short: 'Thực đơn', Icon: CalendarDaysIcon, end: false },
-{ to: '/analysis', label: 'Phân tích', short: 'Phân tích', Icon: ChartPieIcon, end: false },
 { to: '/profile', label: 'Hồ sơ sức khỏe', short: 'Hồ sơ', Icon: UserRoundIcon, end: false }];
 
 const mobileNavItems = [
@@ -88,7 +87,7 @@ export function AppLayout() {
       {/* Mobile bottom tab bar */}
       <nav
         aria-label="Điều hướng chính"
-        className="fixed inset-x-3 bottom-2 z-30 rounded-full border border-[#77513c] bg-[#35271f]/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_10px_35px_rgba(53,39,31,0.28)] backdrop-blur lg:hidden">
+        className="fixed inset-x-3 bottom-2 z-30 rounded-full border border-[#1F5136] bg-[#1F5136]/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_10px_35px_rgba(53,39,31,0.28)] backdrop-blur lg:hidden">
         
         <ul className="grid grid-cols-5">
           {mobileNavItems.map(({ to, label, Icon, end }) =>
@@ -98,13 +97,13 @@ export function AppLayout() {
               end={end}
               className={({ isActive }) =>
               `flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors duration-150 sm:h-16 sm:text-[11px] ${
-              isActive ? 'text-[#fff7e8]' : 'text-[#e8d9c9]'}`
+              isActive ? 'text-[#FFFFFF]' : 'text-[#F8E6DA]'}`
 
               }>
               
                 {({ isActive }) =>
               <>
-                    <span className={`grid h-7 w-12 place-items-center rounded-full transition-colors duration-150 ${isActive ? 'bg-[#e96b3d] shadow-[0_3px_12px_rgba(233,107,61,0.45)]' : ''}`}>
+                    <span className={`grid h-7 w-12 place-items-center rounded-full transition-colors duration-150 ${isActive ? 'bg-[#C4521F] shadow-[0_3px_12px_rgba(233,107,61,0.45)]' : ''}`}>
                       <Icon className="h-5 w-5" aria-hidden="true" />
                     </span>
                     <span className="whitespace-nowrap">{label}</span>

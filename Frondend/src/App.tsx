@@ -4,7 +4,6 @@ import { Toaster } from 'sonner';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { AppLayout } from './layouts/AppLayout';
-import { Analysis } from './pages/Analysis';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { MealPlan } from './pages/MealPlan';
@@ -34,7 +33,7 @@ export function App() {
               <Route path="menu" element={<DishMenu />} />
               <Route path="roulette" element={<FoodRoulette />} />
               <Route path="meal-plan" element={<MealPlan />} />
-              <Route path="analysis" element={<Analysis />} />
+              <Route path="analysis" element={<Navigate to="/" replace />} />
               <Route path="profile" element={<Profile />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -58,10 +58,6 @@ class NutritionInput(BaseModel):
     goal: Goal | None = None
 
 
-class NutritionHistorySaveInput(BaseModel):
-    body_status_input: dict | None = None
-
-
 class GenerateInput(BaseModel):
     plan_date: date | None = None
     meal_split: dict[str, float] | None = None

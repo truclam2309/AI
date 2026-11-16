@@ -9,8 +9,7 @@ Base URL mặc định: `http://127.0.0.1:8000/api/v1`. Ghi đè bằng `VITE_AP
 | GET | `/users/me` | Trả `{data: user}`; profile nằm trong user |
 | PUT | `/users/me/profile` | Cập nhật hồ sơ; trả `{data: profile}` |
 | POST | `/nutrition/calculate` | Tính từ hồ sơ hiện tại hoặc các trường profile gửi trong body; trả BMI, BMR, TDEE, calories, protein/carb/fat và công thức |
-| POST | `/nutrition/body-status` | Nhận đủ 13 cột input theo tên CSV; trả nhãn thể trạng, xác suất 7 lớp, BMI và gợi ý mục tiêu từ pipeline đã lưu |
-| POST | `/nutrition/history` | Lưu phép tính từ hồ sơ đã lưu; nhận `body_status_input?` để lưu cả đầu vào và kết quả thể trạng |
+| POST | `/nutrition/history` | Lưu phép tính dinh dưỡng từ hồ sơ đã lưu |
 | GET | `/nutrition/history` | Trả tối đa 30 phép tính đã lưu gần nhất của người dùng |
 | POST | `/recommendations/by-ingredients` | `{ingredients, limit?, max_calories?, min_protein?, goal?}`; trả kết quả cosine, thành phần khớp/còn thiếu và dinh dưỡng theo khẩu phần |
 | GET | `/meal-plans?date=YYYY-MM-DD` | Trả `{date, data: [plan versions]}`; từng món có `image_url`, `ingredients`, `instructions`; bỏ ngày để lấy hôm nay |

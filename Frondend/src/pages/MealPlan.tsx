@@ -354,8 +354,8 @@ function DishDetails({dish, onClose}: {dish: MealPlanDish; onClose: () => void})
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="dish-details-title" onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }} className="my-auto max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-[#fff8f2] shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#eee3d9] bg-[#fff8f2]/95 px-5 py-4 backdrop-blur sm:px-7">
+      <section role="dialog" aria-modal="true" aria-labelledby="dish-details-title" onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }} className="my-auto max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-[#FFFFFF] shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#F6F3EC] bg-[#FFFFFF]/95 px-5 py-4 backdrop-blur sm:px-7">
           <h2 id="dish-details-title" className="text-sm font-semibold text-muted">Chi tiết món ăn</h2>
           <button type="button" autoFocus onClick={onClose} aria-label="Đóng chi tiết món ăn" className="rounded-lg p-2 text-muted hover:bg-surface hover:text-ink"><XIcon className="h-5 w-5" /></button>
         </div>
@@ -365,7 +365,7 @@ function DishDetails({dish, onClose}: {dish: MealPlanDish; onClose: () => void})
             <h3 className="text-2xl font-semibold leading-tight sm:text-3xl">{dish.name}</h3>
             <p className="mt-2 text-sm text-muted">Khẩu phần {fmt(dish.serving_grams, 1)} g</p>
           </div>
-          <section className="rounded-3xl border border-[#dfe1cf] bg-[#f2f1e3] p-5 sm:p-6">
+          <section className="rounded-3xl border border-[#F8E6DA] bg-[#F6F3EC] p-5 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-lg font-semibold">Dinh dưỡng cả món</h4>
               <span className="text-sm text-brand">Theo khẩu phần catalog</span>
@@ -381,12 +381,12 @@ function DishDetails({dish, onClose}: {dish: MealPlanDish; onClose: () => void})
           <section>
             <div className="mb-3 flex items-end justify-between gap-3">
               <h4 className="text-2xl font-medium">Nguyên liệu</h4>
-              <span className="rounded-full bg-[#f0efdf] px-4 py-2 text-sm font-medium text-brand">{ingredients.length} mục</span>
+              <span className="rounded-full bg-[#F6F3EC] px-4 py-2 text-sm font-medium text-brand">{ingredients.length} mục</span>
             </div>
-            {ingredients.length ? <ul className="divide-y divide-[#eee3d9]">
+            {ingredients.length ? <ul className="divide-y divide-[#F6F3EC]">
               {ingredients.map((ingredient, index) => <li key={`${ingredient.name}-${index}`} className="flex min-h-12 items-center gap-4 py-2.5 text-sm">
                 <span className="min-w-0 flex-1 font-medium">{ingredient.name}</span>
-                {ingredient.amount && <span className="shrink-0 text-right font-medium text-[#c95732]">{ingredient.amount}</span>}
+                {ingredient.amount && <span className="shrink-0 text-right font-medium text-[#C4521F]">{ingredient.amount}</span>}
               </li>)}
             </ul> : <p className="text-sm text-muted">Dataset chưa có thông tin nguyên liệu cho món này.</p>}
           </section>
@@ -395,7 +395,7 @@ function DishDetails({dish, onClose}: {dish: MealPlanDish; onClose: () => void})
             {steps.length ? <ol className="space-y-3">
               {steps.map((step, index) => <li key={`${index}-${step}`} className="rounded-2xl bg-white p-5 sm:p-6">
                 <div className="flex items-start gap-4">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#cf4f2c] text-base font-semibold text-white">{index + 1}</span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#C4521F] text-base font-semibold text-white">{index + 1}</span>
                   <p className="pt-1 text-sm leading-6 sm:text-base">{step}</p>
                 </div>
               </li>)}
@@ -408,7 +408,7 @@ function DishDetails({dish, onClose}: {dish: MealPlanDish; onClose: () => void})
 }
 
 function NutritionValue({label, value, unit}: {label: string; value: number; unit: string}) {
-  return <div><p className="font-serif text-2xl tabular-nums sm:text-3xl">{fmt(value, 1)}{unit === 'g' ? 'g' : ''}</p><p className="mt-1 text-sm text-muted">{unit === 'kcal' ? 'Kcal (cả món)' : label}</p></div>;
+  return <div><p className="font-sans text-2xl tabular-nums sm:text-3xl">{fmt(value, 1)}{unit === 'g' ? 'g' : ''}</p><p className="mt-1 text-sm text-muted">{unit === 'kcal' ? 'Kcal (cả món)' : label}</p></div>;
 }
 
 function Total({label, value}: {label: string; value: string}) {

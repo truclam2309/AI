@@ -6,6 +6,7 @@ import { nutritionApi } from '../api/nutritionApi';
 import { ApiError, toApiError } from '../api/errors';
 import { LoadingState } from '../components/LoadingState';
 import { ProfileRequired } from '../components/ProfileRequired';
+import { Analysis } from './Analysis';
 import { useAuth } from '../contexts/AuthContext';
 import { DailyMealPlan, NutritionCalculation } from '../types/nutrition';
 import { formatLongDate, todayISO } from '../utils/date';
@@ -103,6 +104,7 @@ export function Dashboard() {
           </section>
 
           <p className="text-xs leading-5 text-muted">BMR là năng lượng tiêu hao lúc nghỉ; TDEE là mức duy trì ước tính. BMI và các mức calo chỉ mang tính tham khảo.</p>
+          <Analysis />
         </>
       )}
     </div>
