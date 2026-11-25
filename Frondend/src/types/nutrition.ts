@@ -4,6 +4,14 @@ export type NutritionGoal = 'lose_weight' | 'gain_weight' | 'gain_muscle' | 'mai
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type NutritionHistoryItem = NutritionCalculation & { id: number };
 
+export interface WeightLog {
+  id: number;
+  measured_on: string;
+  weight_kg: number;
+  note: string | null;
+  created_at: string;
+}
+
 export interface UserProfile {
   full_name?: string | null;
   date_of_birth: string | null;

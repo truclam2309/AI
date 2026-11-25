@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, TransitionEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ChefHatIcon, DicesIcon, LoaderCircleIcon, PencilLineIcon, RotateCwIcon, SparklesIcon, StarIcon } from 'lucide-react';
 import { recommendationApi } from '../api/recommendationApi';
@@ -17,6 +17,7 @@ import { MealType, NutritionGoal } from '../types/nutrition';
 import { CatalogDish } from '../types/recommendations';
 import { todayISO } from '../utils/date';
 import { fmt } from '../utils/format';
+import { setGuestDishSelection } from '../utils/guestExperience';
 
 const GOALS: Record<NutritionGoal, string> = {
   lose_weight: 'Giảm cân',
@@ -36,6 +37,11 @@ function shuffle<T,>(items: T[]): T[] {
   return result;
 }
 
+function readGuestGoal(): NutritionGoal | null {
+  try { return (JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {profile?: {goal?: NutritionGoal}}).profile?.goal ?? null; }
+  catch { return null; }
+}
+
 function recipeSteps(instructions: string | null): string[] {
   if (!instructions?.trim()) return [];
   const cleaned = instructions.replace(/\r/g, '').trim();
@@ -49,11 +55,13 @@ function recipeSteps(instructions: string | null): string[] {
   return sentences.length > 1 ? sentences : [cleaned];
 }
 
-async function loadGoalDishes(goal: NutritionGoal | null) {
-  const firstPage = await recommendationApi.dishes('', goal || '', PAGE_SIZE, 0);
+async function loadGoalDishes(goal: NutritionGoal | null, isGuest: boolean) {
+  const pageSize = isGuest ? 100 : PAGE_SIZE;
+  const firstPage = await recommendationApi.dishes('', goal || '', pageSize, 0);
+  if (isGuest || firstPage.total <= pageSize) return firstPage.results;
   const offsets = [];
-  for (let offset = PAGE_SIZE; offset < firstPage.total; offset += PAGE_SIZE) offsets.push(offset);
-  const remainingPages = await Promise.all(offsets.map((offset) => recommendationApi.dishes('', goal || '', PAGE_SIZE, offset)));
+  for (let offset = pageSize; offset < firstPage.total; offset += pageSize) offsets.push(offset);
+  const remainingPages = await Promise.all(offsets.map((offset) => recommendationApi.dishes('', goal || '', pageSize, offset)));
   const uniqueDishes = new Map<string, CatalogDish>();
   [firstPage, ...remainingPages].flatMap((page) => page.results).forEach((dish) => uniqueDishes.set(dish.dish_id, dish));
   // Goal now controls the model score and ordering, not which dishes are hidden.
@@ -61,11 +69,11 @@ async function loadGoalDishes(goal: NutritionGoal | null) {
 }
 
 export function FoodRoulette() {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const navigate = useNavigate();
-  const profileGoal = user?.profile?.goal ?? null;
+  const profileGoal = user?.profile?.goal ?? (user ? null : readGuestGoal());
   const [goal, setGoal] = useState<NutritionGoal | null>(profileGoal);
-  const storageKey = user ? `${STORE_PREFIX}.${user.id}.${goal ?? 'all'}` : null;
+  const storageKey = `${STORE_PREFIX}.${user?.id ?? 'guest'}.${goal ?? 'all'}`;
   const [dishes, setDishes] = useState<CatalogDish[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
@@ -91,17 +99,13 @@ export function FoodRoulette() {
     setDishes([]);
     setSelectedIds([]);
     setVisibleIds([]);
-    if (!storageKey) {
-      setLoading(false);
-      return () => { active = false; };
-    }
-
-    loadGoalDishes(goal)
+    loadGoalDishes(goal, isGuest)
       .then((result) => {
         if (!active) return;
         let saved: string[] | null = null;
         try {
-          const raw = window.localStorage.getItem(storageKey);
+          const storage = user ? window.localStorage : window.sessionStorage;
+          const raw = storage.getItem(storageKey);
           const parsed: unknown = raw ? JSON.parse(raw) : null;
           if (Array.isArray(parsed) && parsed.every((id) => typeof id === 'string')) saved = parsed;
         } catch { saved = null; }
@@ -116,16 +120,16 @@ export function FoodRoulette() {
       .finally(() => { if (active) setLoading(false); });
 
     return () => { active = false; };
-  }, [goal, storageKey, reloadVersion]);
+  }, [goal, storageKey, reloadVersion, user, isGuest]);
 
   useEffect(() => {
     if (readyKey !== storageKey || !storageKey) return;
-    try { window.localStorage.setItem(storageKey, JSON.stringify(selectedIds)); } catch { /* Keep in-memory selection if storage is unavailable. */ }
-  }, [readyKey, selectedIds, storageKey]);
+    try { (user ? window.localStorage : window.sessionStorage).setItem(storageKey, JSON.stringify(selectedIds)); } catch { /* Keep in-memory selection if storage is unavailable. */ }
+  }, [readyKey, selectedIds, storageKey, user]);
 
   useEffect(() => {
     let active = true;
-    if (!goal) { setRemainingCalories(null); return () => { active = false; }; }
+    if (!goal || !user) { setRemainingCalories(null); return () => { active = false; }; }
     Promise.all([nutritionApi.calculate(), mealPlanApi.getPlans(todayISO())])
       .then(([nutrition, plans]) => {
         if (!active) return;
@@ -134,7 +138,7 @@ export function FoodRoulette() {
       })
       .catch(() => { if (active) setRemainingCalories(null); });
     return () => { active = false; };
-  }, [goal]);
+  }, [goal, user]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const eligibleDishes = useMemo(() => dishes.filter((dish) => selectedSet.has(dish.dish_id)), [dishes, selectedSet]);
@@ -178,6 +182,11 @@ export function FoodRoulette() {
   };
 
   const addToMealPlan = async (dish: CatalogDish) => {
+    if (!user) {
+      setGuestDishSelection({dish_id: dish.dish_id, meal_type: mealType, plan_date: todayISO(), dish});
+      navigate('/meal-plan', { state: { from: '/roulette' } });
+      return;
+    }
     setSavingDishId(dish.dish_id);
     try {
       const planDate = todayISO();
@@ -213,8 +222,6 @@ export function FoodRoulette() {
     pendingWinner.current = null;
   };
 
-  if (!user) return <LoadingState label="Đang tải tài khoản..." />;
-
   return <div className="-mx-4 -mt-5 min-h-[calc(100dvh-4rem)] overflow-hidden bg-canvas px-4 pb-8 pt-6 text-ink sm:-mx-6 sm:px-6 lg:-mx-10 lg:-mt-10 lg:px-10 lg:pt-9">
       <div className="pointer-events-none absolute left-0 top-24 h-56 w-56 -translate-x-1/2 rounded-full bg-[#F8E6DA]/35 blur-2xl" />
     <div className="pointer-events-none absolute right-0 top-56 h-64 w-64 translate-x-1/3 rounded-full bg-[#F8E6DA]/30 blur-2xl" />
@@ -222,6 +229,7 @@ export function FoodRoulette() {
       <p className="flex items-center justify-center gap-2 text-xs font-black tracking-[0.28em] text-[#1F5136] sm:text-sm"><ChefHatIcon className="h-4 w-4" /> EM THÍCH ĂN GÌ? <StarIcon className="h-3.5 w-3.5 fill-[#C98F12] text-[#C98F12]" /></p>
       <h1 className="mt-2 font-sans text-4xl font-bold leading-tight tracking-tight text-[#C4521F] sm:text-5xl lg:text-6xl">EM HỔNG BIẾT</h1>
       <p className="mt-2 text-sm text-[#1F5136] sm:text-base">Hôm nay ăn gì? Để vòng quay quyết!</p>
+      {!user && <p className="mx-auto mt-3 max-w-xl rounded-2xl border border-[#F8E6DA] bg-white/80 p-3 text-sm text-[#5F6B63]">Bạn đang dùng thử MyFit. Quay món và xem công thức miễn phí; đăng ký để lưu món vào thực đơn.</p>}
       <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#F8E6DA] bg-white/80 px-4 py-2 text-xs font-semibold text-[#1F5136] shadow-sm sm:text-sm"><SparklesIcon className="h-4 w-4 text-[#C4521F]" />{goal ? <>Điểm phù hợp đang tính theo mục tiêu: <span className="font-black text-[#C4521F]">{GOALS[goal]}</span></> : <>Đang xem tất cả món ăn; chọn mục tiêu để xem điểm phù hợp</>}</div>
     </header>
 
@@ -241,7 +249,7 @@ export function FoodRoulette() {
       </div>
 
       <div className="relative mx-auto mt-4 flex max-w-sm flex-col items-center gap-2">
-        <button type="button" onClick={startSpin} disabled={spinning || visibleDishes.length < 2} className="group inline-flex h-14 w-full items-center justify-center gap-3 rounded-full bg-gradient-to-b from-[#C4521F] to-[#C4521F] text-lg font-black tracking-[0.12em] text-white shadow-[0_7px_0_#1F5136,0_12px_22px_rgba(204,81,47,0.26)] transition hover:-translate-y-0.5 hover:shadow-[0_9px_0_#1F5136,0_15px_25px_rgba(204,81,47,0.3)] active:translate-y-1 active:shadow-[0_3px_0_#1F5136] disabled:cursor-not-allowed disabled:opacity-55"><RotateCwIcon className={`h-5 w-5 ${spinning ? 'animate-spin' : 'transition-transform group-hover:rotate-45'}`} />{spinning ? 'ĐANG QUAY...' : 'QUAY!'}</button>
+          <button type="button" onClick={startSpin} disabled={spinning || visibleDishes.length < 2} className="group inline-flex h-14 w-full items-center justify-center gap-3 rounded-full bg-gradient-to-b from-[#C4521F] to-[#C4521F] text-lg font-black tracking-[0.12em] text-white shadow-[0_7px_0_#1F5136,0_12px_22px_rgba(204,81,47,0.26)] transition hover:-translate-y-0.5 hover:shadow-[0_9px_0_#1F5136,0_15px_25px_rgba(204,81,47,0.3)] active:translate-y-1 active:shadow-[0_3px_0_#1F5136] disabled:cursor-not-allowed disabled:opacity-55"><RotateCwIcon className={`h-5 w-5 ${spinning ? 'animate-spin' : 'transition-transform group-hover:rotate-45'}`} />{spinning ? 'ĐANG QUAY...' : 'QUAY!'}</button>
         {eligibleDishes.length < 2 && <p className="text-center text-xs text-[#C4521F]">Chọn ít nhất 2 món hợp mục tiêu để bắt đầu.</p>}
       </div>
 
@@ -264,14 +272,15 @@ export function FoodRoulette() {
           </div>
         </div>
         <div className="mt-5 flex flex-col gap-3 border-t border-[#F6F3EC] pt-4 sm:flex-row sm:items-end sm:justify-between">
+          {!user && <p className="text-sm text-[#5F6B63]">Tạo tài khoản để lưu món này vào thực đơn.</p>}
           <label className="text-xs font-semibold text-[#1F5136]">Thêm vào bữa
             <select value={mealType} onChange={(event) => setMealType(event.target.value as MealType)} className="mt-1.5 block h-10 w-full rounded-xl border border-[#F8E6DA] bg-[#FFFFFF] px-3 text-sm text-[#1F5136] outline-none focus:border-[#C4521F] sm:w-48">
               <option value="breakfast">Bữa sáng</option><option value="lunch">Bữa trưa</option><option value="dinner">Bữa tối</option><option value="snack">Bữa phụ</option>
             </select>
           </label>
-          <button type="button" onClick={() => addToMealPlan(featuredDish)} disabled={savingDishId === featuredDish.dish_id} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#1F5136] px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#1F5136] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
+          {!user ? <button type="button" onClick={() => addToMealPlan(featuredDish)} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#1F5136] px-6 text-sm font-bold text-white">Thử thêm vào thực đơn</button> : <button type="button" onClick={() => addToMealPlan(featuredDish)} disabled={savingDishId === featuredDish.dish_id} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#1F5136] px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#1F5136] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70">
             {savingDishId === featuredDish.dish_id ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : <SparklesIcon className="h-4 w-4" />}{savingDishId === featuredDish.dish_id ? 'Đang thêm...' : 'Chọn món vào thực đơn'}
-          </button>
+          </button>}
         </div>
       </section>}
 
@@ -282,6 +291,7 @@ export function FoodRoulette() {
           <ActionButton icon={<DicesIcon className="h-4 w-4" />} label="Món khác" disabled={spinning || eligibleDishes.length <= 8} onClick={changeWheel} />
         </div>
         {eligibleDishes.length > 0 && <p className="text-center text-[11px] text-[#C4521F]">Lựa chọn của bạn được lưu trên thiết bị và dùng lại cho mục tiêu này.</p>}
+        {isGuest && dishes.length >= PAGE_SIZE && <div className="rounded-xl border border-[#F8E6DA] bg-white p-4 text-center text-sm"><p>Vòng quay dùng thử đang giới hạn 100 món.</p><Link to="/login" className="mt-2 inline-block font-semibold text-[#C4521F] hover:underline">Đăng nhập để dùng toàn bộ kho món →</Link></div>}
       </div>
     </>}
 

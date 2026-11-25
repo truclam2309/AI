@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { LoaderCircleIcon } from 'lucide-react';
+import { EyeIcon, LoaderCircleIcon } from 'lucide-react';
 import { toApiError } from '../api/errors';
 import { TextField } from '../components/TextField';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthLayout } from '../layouts/AuthLayout';
 
 export function Login() {
-  const { login, status } = useAuth();
+  const { login, status, enterGuest } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as {from?: string} | null)?.from ?? '/';
@@ -63,6 +63,9 @@ export function Login() {
       <p className="mt-6 text-center text-sm text-muted">
         Chưa có tài khoản? <Link to="/register" className="font-medium text-brand hover:underline">Đăng ký</Link>
       </p>
+      <div className="my-5 flex items-center gap-3 text-xs text-muted"><span className="h-px flex-1 bg-line" />HOẶC<span className="h-px flex-1 bg-line" /></div>
+      <button type="button" onClick={() => { enterGuest(); navigate('/', { replace: true }); }} className="btn-secondary h-11 w-full"><EyeIcon className="h-4 w-4" />Trải nghiệm với tư cách khách</button>
+      <p className="mt-2 text-center text-xs text-muted">Dữ liệu thử chỉ dùng tạm trong phiên này, không lưu vào lịch sử.</p>
     </AuthLayout>
   );
 }

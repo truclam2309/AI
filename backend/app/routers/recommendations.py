@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from .. import state
 from ..database import get_db
-from ..dependencies import current_user
-from ..models import Dish, User
+from ..dependencies import optional_current_user
+from ..models import Dish, User, UserProfile
 from ..schemas import CatalogDish, CatalogDishResponse, IngredientSearchInput, IngredientSearchResponse
 
 router = APIRouter(prefix="/api/v1/recommendations", tags=["Recommendations"])
@@ -25,7 +25,6 @@ def list_dishes(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    _user: User = Depends(current_user),
 ):
     # Hide age-specific toddler dishes from the user-facing catalog and roulette.
     statement = select(Dish).where(Dish.name.not_ilike("%(18 tháng trở lên)%"))
@@ -38,13 +37,16 @@ def list_dishes(
             raise HTTPException(422, "Mục tiêu dinh dưỡng không hợp lệ.")
         bundle = state.model_bundle
         if not bundle:
-            raise HTTPException(503, "Random Forest chưa được nạp; không thể tính điểm phù hợp mục tiêu.")
+            # Catalog browsing remains available while the optional scoring model is offline.
+            dishes = db.scalars(statement.order_by(Dish.name).offset(offset).limit(limit)).all()
+            return {"total": total, "results": [CatalogDish.from_dish(dish) for dish in dishes]}
         dishes = db.scalars(statement.order_by(Dish.name)).all()
         model = bundle["model"]
         class_ids = [int(value) for value in model.classes_]
         class_id = GOAL_CLASS_IDS[goal]
         if class_id not in class_ids:
-            raise HTTPException(503, "Random Forest không có lớp cho mục tiêu đã chọn.")
+            dishes = db.scalars(statement.order_by(Dish.name).offset(offset).limit(limit)).all()
+            return {"total": total, "results": [CatalogDish.from_dish(dish) for dish in dishes]}
         valid_dishes = [
             dish for dish in dishes
             if all(value is not None for value in (
@@ -80,7 +82,6 @@ def list_dishes(
 @router.get("/ingredients")
 def suggest_ingredients(
     query: str = Query(min_length=1, max_length=100),
-    _user: User = Depends(current_user),
 ):
     recommender = state.ingredient_recommender
     if recommender is None:
@@ -91,18 +92,26 @@ def suggest_ingredients(
 @router.post("/by-ingredients", response_model=IngredientSearchResponse)
 def by_ingredients(
     payload: IngredientSearchInput,
-    user: User = Depends(current_user),
+    user: User | None = Depends(optional_current_user),
     _db: Session = Depends(get_db),
 ):
     recommender = state.ingredient_recommender
     if recommender is None:
         raise HTTPException(503, "Chỉ mục tìm nguyên liệu chưa sẵn sàng; kiểm tra dữ liệu món ăn và khởi động lại backend.")
-    goal = payload.goal or (user.profile.goal if user.profile else None)
+    goal = payload.goal or (user.profile.goal if user and user.profile else None)
+    profile = user.profile if user else None
+    if profile is None and (payload.allergies or payload.avoid_ingredients):
+        import json
+        profile = UserProfile(
+            user_id=0,
+            allergies_json=json.dumps(payload.allergies, ensure_ascii=False),
+            avoid_ingredients_json=json.dumps(payload.avoid_ingredients, ensure_ascii=False),
+        )
     return recommender.search(
         payload.ingredients,
         limit=payload.limit,
         max_calories=payload.max_calories,
         min_protein=payload.min_protein,
         goal=goal,
-        profile=user.profile,
+        profile=profile,
     )

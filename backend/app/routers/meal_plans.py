@@ -1,6 +1,8 @@
 import csv
 import io
+import json
 from datetime import date
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
@@ -8,14 +10,112 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
+from .. import state
+from ..catalog import get_dishes
 from ..dependencies import current_user
-from ..models import DailyMealPlan, Dish, MealPlanItem, User
-from ..schemas import ConsumptionInput, CookedInput, GenerateInput, SelectDishInput
-from ..services.meal_plans import create_meal_plan, replace_meal_with_dish
+from ..models import DailyMealPlan, Dish, MealPlanItem, User, UserProfile
+from ..nutrition import age_on, calculate
+from ..recommender import generate_meals
+from ..schemas import ConsumptionInput, CookedInput, GenerateInput, GuestMealPlanPreviewInput, SelectDishInput
+from ..services.meal_plans import _manual_dish_item, _validate_manual_dish, create_meal_plan, replace_meal_with_dish
+from ..utils.profiles import profile_for_calculation
 from ..utils.time import local_today
 from ..utils.serialization import serialize_plan
 
 router = APIRouter(prefix="/api/v1/meal-plans", tags=["Meal plans"])
+
+
+@router.post("/preview")
+def preview_for_guest(payload: GuestMealPlanPreviewInput, db: Session = Depends(get_db)):
+    """Generate an ephemeral plan from a trial profile without writing any records."""
+    profile = UserProfile(
+        user_id=0,
+        full_name=payload.full_name,
+        date_of_birth=payload.date_of_birth,
+        height_cm=payload.height_cm,
+        weight_kg=payload.weight_kg,
+        sex_for_calculation=payload.sex_for_calculation,
+        activity_level=payload.activity_level,
+        goal=payload.goal,
+        target_weight_kg=payload.target_weight_kg,
+        allergies_json=json.dumps(payload.allergies, ensure_ascii=False),
+        avoid_ingredients_json=json.dumps(payload.avoid_ingredients, ensure_ascii=False),
+        disliked_dishes_json=json.dumps(payload.disliked_dishes, ensure_ascii=False),
+        favorite_dishes_json=json.dumps(payload.favorite_dishes, ensure_ascii=False),
+    )
+    fields = profile_for_calculation(profile)
+    plan_date = payload.plan_date or local_today()
+    age = age_on(fields["date_of_birth"], plan_date)
+    nutrition = calculate(
+        age, fields["height_cm"], fields["weight_kg"], fields["sex_for_calculation"],
+        fields["activity_level"], fields["goal"],
+    )
+    if nutrition["medical_review_required"]:
+        raise HTTPException(422, {
+            "message": "Cần chuyên gia đánh giá trước khi tạo thực đơn tự động.",
+            "nutrition": nutrition,
+        })
+    dishes = get_dishes(db)
+    if not dishes:
+        raise HTTPException(503, "Catalog món ăn chưa được nạp; kiểm tra NUTRIAI_DATASET_PATH.")
+    if not state.model_bundle:
+        raise HTTPException(503, "Random Forest chưa được nạp; chưa thể tạo thực đơn thử.")
+    try:
+        selected, warnings = generate_meals(
+            db, 0, profile, dishes, plan_date, nutrition["target_calories"], payload.meal_split,
+            model_bundle=state.model_bundle,
+            target_macros={"protein": nutrition["protein_g"], "carb": nutrition["carb_g"], "fat": nutrition["fat_g"]},
+            main_meals=payload.main_meals, side_meals=payload.side_meals,
+            excluded_dish_ids=set(payload.excluded_dish_ids),
+        )
+        if payload.selected_dish_id:
+            if not payload.selected_meal_type:
+                raise HTTPException(422, "Cần chọn bữa cho món được chọn.")
+            selected_dish = db.get(Dish, payload.selected_dish_id)
+            if selected_dish is None:
+                raise HTTPException(404, "Không tìm thấy món được chọn trong catalog.")
+            _validate_manual_dish(selected_dish, profile)
+            replacement = _manual_dish_item(selected_dish, payload.selected_meal_type)
+            replacement["position"] = next(
+                (item["position"] for item in selected if item["meal_type"] == payload.selected_meal_type),
+                len(selected),
+            )
+            if payload.selected_meal_type == "snack":
+                selected.append(replacement)
+            else:
+                selected = [
+                    replacement if item["meal_type"] == payload.selected_meal_type else item
+                    for item in selected
+                ]
+            if sum(item["calories"] for item in selected) > nutrition["target_calories"]:
+                raise HTTPException(422, "Món được chọn làm tổng calo vượt mục tiêu thử nghiệm.")
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    warnings.extend(nutrition["warnings"])
+    if state.model_warning:
+        warnings.append(state.model_warning)
+    total_calories = round(sum(item["calories"] for item in selected), 1)
+    totals = {key: round(sum(item[key] for item in selected), 1) for key in ("protein", "carb", "fat")}
+    if any(abs(totals[key] - nutrition[f"{key}_g"]) / max(nutrition[f"{key}_g"], 1.0) > 0.15 for key in totals):
+        warnings.append("Độ lệch protein/carb/fat vượt 15%; catalog không có tổ hợp gần mục tiêu hơn trong giới hạn calo và nhóm bữa.")
+    return {
+        "id": 0, "plan_date": plan_date.isoformat(), "version": 0,
+        "bmi": nutrition["bmi"], "bmr_kcal": nutrition["bmr_kcal"], "tdee_kcal": nutrition["tdee_kcal"],
+        "target_calories": nutrition["target_calories"], "total_calories": total_calories,
+        "goal": fields["goal"], "algorithm_version": "nutriai-recommender-1-preview",
+        "warnings": warnings, "created_at": datetime.now(timezone.utc).isoformat(),
+        "meals": [{
+            "dish_id": item["dish_id"], "name": item["dish_name"], "food_group": item["food_group"],
+            "ingredients": item["ingredients"], "instructions": item["instructions"], "image_url": item["image_url"],
+            "meal_type": item["meal_type"], "is_cooked": False, "consumed_ratio": 0,
+            "serving_grams": item["serving_grams"], "calories": item["calories"],
+            "protein": item["protein"], "carb": item["carb"], "fat": item["fat"],
+            "position": item["position"], "reason": item["recommendation_reason"],
+        } for item in selected],
+        "nutrition_totals": totals,
+        "consumed_totals": {"calories": 0, "protein": 0, "carb": 0, "fat": 0},
+    }
 
 
 @router.put("/items/{item_id}/cooked")

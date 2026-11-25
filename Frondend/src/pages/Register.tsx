@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { LoaderCircleIcon } from 'lucide-react';
 import { toApiError } from '../api/errors';
 import { TextField } from '../components/TextField';
@@ -9,6 +9,8 @@ import { AuthLayout } from '../layouts/AuthLayout';
 export function Register() {
   const { register, status } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from ?? '/profile';
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,7 +37,7 @@ export function Register() {
         ...(email.trim() ? { email: email.trim() } : {}),
         password
       });
-      navigate('/profile', { replace: true });
+      navigate(from, { replace: true });
     } catch (error) {
       setMessage(toApiError(error).message);
     } finally {

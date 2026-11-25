@@ -1,7 +1,11 @@
-import { DailyMealPlan, GeneratePlanResponse, MealType } from '../types/nutrition';
+import { DailyMealPlan, GeneratePlanResponse, MealType, ProfileUpdate } from '../types/nutrition';
 import { request } from './client';
 
 export const mealPlanApi = {
+  previewGuest: (profile: ProfileUpdate, options: {plan_date?: string; meal_split?: Record<string, number>; main_meals?: number; side_meals?: number; selected_dish_id?: string; selected_meal_type?: MealType; excluded_dish_ids?: string[]} = {}) =>
+    request<DailyMealPlan>('POST', '/meal-plans/preview', {
+      body: { ...profile, ...options }, auth: false, timeoutMs: 120000
+    }),
   getPlans: async (date?: string) =>
     (await request<{date: string; data: DailyMealPlan[]}>('GET', '/meal-plans', {
       query: date ? { date } : undefined

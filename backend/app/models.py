@@ -113,3 +113,14 @@ class NutritionCalculationRecord(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     result_json: Mapped[str] = mapped_column(Text)
+
+
+class WeightLog(Base):
+    __tablename__ = "weight_logs"
+    __table_args__ = (UniqueConstraint("user_id", "measured_on", name="uq_user_weight_log_day"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    measured_on: Mapped[date] = mapped_column(Date, index=True)
+    weight_kg: Mapped[float] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

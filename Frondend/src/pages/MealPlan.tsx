@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDaysIcon, ImageIcon, LoaderCircleIcon, RefreshCwIcon, SparklesIcon, XIcon } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -7,9 +7,10 @@ import { mealPlanApi } from '../api/mealPlanApi';
 import { toApiError } from '../api/errors';
 import { LoadingState } from '../components/LoadingState';
 import { useAuth } from '../contexts/AuthContext';
-import { DailyMealPlan, MealPlanDish } from '../types/nutrition';
+import { DailyMealPlan, MealPlanDish, ProfileUpdate } from '../types/nutrition';
 import { formatLongDate, todayISO } from '../utils/date';
 import { fmt } from '../utils/format';
+import { clearGuestDishSelection, getGuestDishSelection } from '../utils/guestExperience';
 
 const meals = [
   { key: 'breakfast', label: 'Bữa sáng', hint: 'Bắt đầu ngày mới' },
@@ -43,8 +44,81 @@ function starchAdviceSelections(planId: number | undefined, choices: Record<stri
   return Object.entries(choices).filter(([key]) => key.startsWith(prefix)).map(([, choice]) => choice);
 }
 
+function readGuestProfile(): ProfileUpdate | null {
+  try { return (JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {profile?: ProfileUpdate}).profile ?? null; }
+  catch { return null; }
+}
+
+function readGuestPlans(date?: string): DailyMealPlan[] {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {plan?: DailyMealPlan; plans?: DailyMealPlan[]};
+    const source = [...(stored.plans ?? [])];
+    if (stored.plan && !source.some((item) => item.id === stored.plan?.id || item.created_at === stored.plan?.created_at)) source.push(stored.plan);
+    return source.filter((item) => !date || item.plan_date === date).map((item, index) => {
+      const id = item.id || Date.now() + index;
+      return {...item, id, version: item.version || index + 1,
+        meals: item.meals.map((meal, mealIndex) => ({...meal, id: meal.id || id * 100 + mealIndex}))};
+    });
+  } catch { return []; }
+}
+
+function saveGuestPlans(plans: DailyMealPlan[], current: DailyMealPlan | null) {
+  try {
+    const existing = JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {profile?: ProfileUpdate};
+    sessionStorage.setItem('nutriai.guest-trial', JSON.stringify({profile: existing.profile, plan: current, plans}));
+  } catch { /* Keep the temporary plan in component state if session storage is unavailable. */ }
+}
+
+function addDishToGuestPlan(plan: DailyMealPlan, selection: NonNullable<ReturnType<typeof getGuestDishSelection>>): DailyMealPlan {
+  const oldMeal = plan.meals.find((meal) => meal.meal_type === selection.meal_type);
+  const itemId = Date.now();
+  const dish = selection.dish;
+  const replacement: MealPlanDish = {
+    dish_id: selection.dish_id,
+    name: dish?.name ?? selection.dish_id,
+    food_group: dish?.food_group ?? null,
+    ingredients: dish?.ingredients?.join('\n') ?? null,
+    instructions: dish?.instructions ?? null,
+    image_url: dish?.image_url ?? null,
+    meal_type: selection.meal_type,
+    serving_grams: dish?.serving_grams ?? 100,
+    calories: dish?.calories ?? 0,
+    protein: dish?.protein ?? 0,
+    carb: dish?.carb ?? 0,
+    fat: dish?.fat ?? 0,
+    position: oldMeal?.position ?? Math.max(0, ...plan.meals.map((meal) => meal.position)) + 1,
+    id: itemId,
+    is_cooked: false,
+    consumed_ratio: 0,
+    reason: 'Món được chọn trong chế độ trải nghiệm khách.',
+  };
+  const meals = oldMeal
+    ? plan.meals.map((meal) => meal.id === oldMeal.id ? replacement : meal)
+    : [...plan.meals, replacement];
+  const consumed_totals = meals.reduce((totals, meal) => {
+    const ratio = meal.consumed_ratio ?? 0;
+    return {
+      calories: totals.calories + meal.calories * ratio,
+      protein: totals.protein + meal.protein * ratio,
+      carb: totals.carb + meal.carb * ratio,
+      fat: totals.fat + meal.fat * ratio,
+    };
+  }, {calories: 0, protein: 0, carb: 0, fat: 0});
+  return {
+    ...plan,
+    meals,
+    total_calories: meals.reduce((total, meal) => total + meal.calories, 0),
+    nutrition_totals: meals.reduce((totals, meal) => ({
+      protein: totals.protein + meal.protein,
+      carb: totals.carb + meal.carb,
+      fat: totals.fat + meal.fat,
+    }), {protein: 0, carb: 0, fat: 0}),
+    consumed_totals,
+  };
+}
+
 export function MealPlan() {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const location = useLocation();
   const mealSplit = (location.state as {meal_split?: Record<string, number>} | null)?.meal_split;
   const [searchParams] = useSearchParams();
@@ -60,21 +134,29 @@ export function MealPlan() {
   const [sideMeals, setSideMeals] = useState(0);
   const [cookingIds, setCookingIds] = useState<number[]>([]);
   const [consumptionIds, setConsumptionIds] = useState<number[]>([]);
-  const [starchChoices, setStarchChoices] = useState<Record<string, StarchChoice>>(readStarchChoices);
+  const [starchChoices, setStarchChoices] = useState<Record<string, StarchChoice>>(() => isGuest ? {} : readStarchChoices());
+  const [pendingGuestSelection, setPendingGuestSelection] = useState(() => isGuest ? getGuestDishSelection() : null);
+  const processedGuestSelection = useRef<string | null>(null);
 
   useEffect(() => {
-    try { localStorage.setItem(STARCH_STORAGE_KEY, JSON.stringify(starchChoices)); } catch { /* Storage can be disabled; the current page still works. */ }
-  }, [starchChoices]);
+    if (!isGuest) try { localStorage.setItem(STARCH_STORAGE_KEY, JSON.stringify(starchChoices)); } catch { /* Storage can be disabled; the current page still works. */ }
+  }, [starchChoices, isGuest]);
 
   useEffect(() => {
     if (dateFromQuery && /^\d{4}-\d{2}-\d{2}$/.test(dateFromQuery)) setSelectedDate(dateFromQuery);
   }, [dateFromQuery]);
 
   useEffect(() => {
+    if (pendingGuestSelection?.plan_date && pendingGuestSelection.plan_date !== selectedDate) {
+      setSelectedDate(pendingGuestSelection.plan_date);
+    }
+  }, [pendingGuestSelection?.plan_date, selectedDate]);
+
+  useEffect(() => {
     let active = true;
     setLoading(true);
     setError('');
-    mealPlanApi.getPlans(selectedDate)
+    (isGuest ? Promise.resolve(readGuestPlans(selectedDate)) : mealPlanApi.getPlans(selectedDate))
       .then((result) => {
         if (!active) return;
         setPlans(result);
@@ -84,7 +166,7 @@ export function MealPlan() {
       .catch((cause) => { if (active) setError(toApiError(cause).message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [selectedDate]);
+  }, [selectedDate, isGuest]);
 
   const plan = useMemo(() => plans.find((item) => item.id === versionId) ?? plans[plans.length - 1] ?? null, [plans, versionId]);
   useEffect(() => {
@@ -125,19 +207,95 @@ export function MealPlan() {
       return { mealType, mealCalories, remaining, addKcal, options };
     });
   }, [plan, displayedMeals]);
-  const completeProfile = Boolean(user?.profile?.date_of_birth && user.profile.height_cm && user.profile.weight_kg &&
-    user.profile.sex_for_calculation && user.profile.activity_level && user.profile.goal);
+  const guestProfile = isGuest ? readGuestProfile() : null;
+  const completeProfile = Boolean((user?.profile?.date_of_birth ?? guestProfile?.date_of_birth) &&
+    (user?.profile?.height_cm ?? guestProfile?.height_cm) && (user?.profile?.weight_kg ?? guestProfile?.weight_kg) &&
+    (user?.profile?.sex_for_calculation ?? guestProfile?.sex_for_calculation) &&
+    (user?.profile?.activity_level ?? guestProfile?.activity_level) && (user?.profile?.goal ?? guestProfile?.goal));
+
+  useEffect(() => {
+    if (!isGuest || loading || !completeProfile || !pendingGuestSelection) return;
+    const selectionKey = `${pendingGuestSelection.dish_id}:${pendingGuestSelection.meal_type}:${pendingGuestSelection.plan_date ?? selectedDate}`;
+    if (processedGuestSelection.current === selectionKey) return;
+    processedGuestSelection.current = selectionKey;
+
+    const applySelection = async () => {
+      const profile = readGuestProfile();
+      if (!profile) return;
+      const planDate = pendingGuestSelection.plan_date ?? selectedDate;
+      const storedPlans = readGuestPlans();
+      const datePlans = storedPlans.filter((item) => item.plan_date === planDate);
+      const currentPlan = datePlans[datePlans.length - 1];
+      let nextPlan: DailyMealPlan;
+      let updatedPlans: DailyMealPlan[];
+      if (currentPlan && pendingGuestSelection.dish) {
+        nextPlan = addDishToGuestPlan(currentPlan, pendingGuestSelection);
+        updatedPlans = storedPlans.map((item) => item.id === currentPlan.id ? nextPlan : item);
+        toast.success(`Đã thêm ${pendingGuestSelection.dish.name} vào thực đơn thử.`);
+      } else {
+        const result = await mealPlanApi.previewGuest(profile, {
+          plan_date: planDate,
+          main_meals: 3,
+          side_meals: pendingGuestSelection.meal_type === 'snack' ? 1 : 0,
+          selected_dish_id: pendingGuestSelection.dish_id,
+          selected_meal_type: pendingGuestSelection.meal_type,
+        });
+        const nextId = Date.now();
+        nextPlan = {...result, id: nextId,
+          version: datePlans.reduce((max, item) => Math.max(max, item.version), 0) + 1,
+          meals: result.meals.map((item, index) => ({...item, id: nextId * 100 + index}))};
+        updatedPlans = [...storedPlans, nextPlan];
+        toast.success('Đã thêm món và tạo thực đơn thử trong phiên này.');
+      }
+      clearGuestDishSelection();
+      setPendingGuestSelection(null);
+      saveGuestPlans(updatedPlans, nextPlan);
+      setPlans(updatedPlans.filter((item) => item.plan_date === planDate));
+      setSelectedDate(planDate);
+      setVersionId(nextPlan.id);
+    };
+
+    applySelection().catch((cause) => {
+      processedGuestSelection.current = null;
+      toast.error(toApiError(cause).message);
+    });
+  }, [isGuest, loading, completeProfile, pendingGuestSelection, selectedDate]);
 
   const createOrRegenerate = async () => {
     setWorking(true);
     try {
+      if (isGuest) {
+        const profile = readGuestProfile();
+        if (!profile) throw new Error('Nhập hồ sơ thử nghiệm trước khi tạo thực đơn.');
+        const planDate = selectedDate;
+        const previousPlans = readGuestPlans(planDate);
+        const excludedDishIds = [...new Set(previousPlans.slice(-10).flatMap((savedPlan) => savedPlan.meals.map((meal) => meal.dish_id)))];
+        const result = await mealPlanApi.previewGuest(profile, {
+          plan_date: planDate,
+          ...(mealSplit ? {meal_split: mealSplit} : {}),
+          main_meals: mainMeals,
+          side_meals: sideMeals,
+          excluded_dish_ids: excludedDishIds,
+        });
+        const nextId = Date.now();
+        const nextVersion = (previousPlans.reduce((max, item) => Math.max(max, item.version), 0) || 0) + 1;
+        const temporaryPlan = {...result, id: nextId, version: nextVersion,
+          meals: result.meals.map((item, index) => ({...item, id: nextId * 100 + index}))};
+        const updatedPlans = [...readGuestPlans().filter((item) => item.id !== temporaryPlan.id), temporaryPlan];
+        setPlans(updatedPlans);
+        if (planDate !== selectedDate) setSelectedDate(planDate);
+        setVersionId(nextId);
+        saveGuestPlans(updatedPlans, temporaryPlan);
+        toast.success('Đã tạo thực đơn thử trong phiên này; chưa lưu vào lịch sử tài khoản.');
+        return;
+      }
       const result = plan
         ? await mealPlanApi.regenerate(plan.id, mealSplit, { main_meals: mainMeals, side_meals: sideMeals })
         : await mealPlanApi.generate(selectedDate, mealSplit, { main_meals: mainMeals, side_meals: sideMeals });
       setPlans((current) => [...current, result.data]);
       setVersionId(result.data.id);
       const generatedMainMeals = result.data.meals.filter((item) => item.meal_type !== 'snack').length;
-      const generatedSideMeals = result.data.meals.filter((item) => item.meal_type === 'snack').length;
+        const generatedSideMeals = result.data.meals.filter((item) => item.meal_type === 'snack').length;
       if (generatedMainMeals !== mainMeals || generatedSideMeals !== sideMeals) {
         toast.error(`Backend hiện chỉ trả ${generatedMainMeals} bữa chính và ${generatedSideMeals} bữa phụ. Hãy khởi động lại backend rồi tạo phiên bản mới.`);
       } else {
@@ -152,6 +310,14 @@ export function MealPlan() {
 
   const markCooked = async (dish: MealPlanDish) => {
     if (!dish.id || cookingIds.includes(dish.id)) return;
+    if (isGuest) {
+      const next = plans.map((savedPlan) => savedPlan.id === plan?.id
+        ? {...savedPlan, meals: savedPlan.meals.map((item) => item.id === dish.id ? {...item, is_cooked: !item.is_cooked} : item)}
+        : savedPlan);
+      setPlans(next);
+      saveGuestPlans(next, next.find((item) => item.id === plan?.id) ?? null);
+      return;
+    }
     setCookingIds((ids) => [...ids, dish.id!]);
     try {
       const result = await mealPlanApi.setCooked(dish.id, !dish.is_cooked);
@@ -168,6 +334,22 @@ export function MealPlan() {
 
   const saveConsumption = async (dish: MealPlanDish, consumedRatio: number) => {
     if (!dish.id || consumptionIds.includes(dish.id)) return;
+    if (isGuest) {
+      const next = plans.map((savedPlan) => {
+        if (savedPlan.id !== plan?.id) return savedPlan;
+        const meals = savedPlan.meals.map((item) => item.id === dish.id ? {...item, consumed_ratio: consumedRatio} : item);
+        const consumed_totals = meals.reduce((totals, item) => ({
+          calories: totals.calories + item.calories * item.consumed_ratio,
+          protein: totals.protein + item.protein * item.consumed_ratio,
+          carb: totals.carb + item.carb * item.consumed_ratio,
+          fat: totals.fat + item.fat * item.consumed_ratio,
+        }), {calories: 0, protein: 0, carb: 0, fat: 0});
+        return {...savedPlan, meals, consumed_totals};
+      });
+      setPlans(next);
+      saveGuestPlans(next, next.find((item) => item.id === plan?.id) ?? null);
+      return;
+    }
     setConsumptionIds((ids) => [...ids, dish.id!]);
     try {
       const result = await mealPlanApi.setConsumption(dish.id, consumedRatio);
@@ -199,7 +381,8 @@ export function MealPlan() {
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm text-muted">Kế hoạch theo ngày</p>
-          <h1 className="mt-1 text-3xl font-semibold">Thực đơn của bạn</h1>
+          <h1 className="mt-1 text-3xl font-semibold">{isGuest ? 'Thực đơn trải nghiệm' : 'Thực đơn của bạn'}</h1>
+          {isGuest && <p className="mt-2 text-sm text-muted">Tạo nhiều phiên bản, đánh dấu món đã nấu/đã ăn. Mọi thay đổi chỉ lưu tạm trong phiên khách.</p>}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="relative">
@@ -213,11 +396,19 @@ export function MealPlan() {
 
       {loading ? <LoadingState label="Đang tải thực đơn..." /> : error ? (
         <section className="card p-5" role="alert"><p className="text-sm text-accent">{error}</p></section>
+      ) : isGuest && pendingGuestSelection ? (
+        <section className="card p-6">
+          <h2 className="text-lg font-semibold">Món đã sẵn sàng để thêm</h2>
+          <p className="mt-2 text-sm text-muted">{completeProfile ? 'Món bạn vừa chọn sẽ được đưa vào thực đơn thử. Dữ liệu chỉ lưu trong phiên khách.' : 'Hoàn thiện hồ sơ thử để thêm món vào thực đơn tạm. Thực đơn chỉ lưu trong phiên khách.'}</p>
+          {completeProfile
+            ? <p className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-brand"><LoaderCircleIcon className="h-4 w-4 animate-spin" />Đang thêm món vào thực đơn…</p>
+            : <Link to="/analysis" className="btn-primary mt-4">Hoàn thiện hồ sơ thử</Link>}
+        </section>
       ) : !completeProfile ? (
         <section className="card p-6">
           <h2 className="text-lg font-semibold">Hoàn thiện hồ sơ trước</h2>
           <p className="mt-2 text-sm text-muted">Cần ngày sinh, chiều cao, cân nặng, giới tính tính BMR, mức vận động và mục tiêu.</p>
-          <Link to="/profile" className="btn-primary mt-4">Mở hồ sơ</Link>
+          <Link to={isGuest ? '/analysis' : '/profile'} className="btn-primary mt-4">{isGuest ? 'Nhập hồ sơ thử' : 'Mở hồ sơ'}</Link>
         </section>
       ) : (
         <>
@@ -333,7 +524,7 @@ function MealCard({label, hint, dishes, onSelectDish, onMarkCooked, cookingIds, 
         <p className="mt-3 text-xl font-semibold tabular-nums">{fmt(calories)} <span className="text-sm font-normal text-muted">kcal</span></p>
       </div>
       <div className="divide-y divide-line">
-        {dishes.length ? dishes.map((dish) => <DishRow key={`${dish.position}-${dish.dish_id}`} dish={dish} onSelect={() => onSelectDish(dish)} onMarkCooked={() => onMarkCooked(dish)} busy={dish.id ? cookingIds.includes(dish.id) : true} onSaveConsumption={(ratio) => onSaveConsumption(dish, ratio)} savingConsumption={dish.id ? consumptionIds.includes(dish.id) : true} />) : <p className="p-5 text-sm text-muted">Không có món trong bữa này.</p>}
+        {dishes.length ? dishes.map((dish) => <DishRow key={`${dish.position}-${dish.dish_id}`} dish={dish} onSelect={() => onSelectDish(dish)} onMarkCooked={() => onMarkCooked(dish)} busy={dish.id ? cookingIds.includes(dish.id) : false} onSaveConsumption={(ratio) => onSaveConsumption(dish, ratio)} savingConsumption={dish.id ? consumptionIds.includes(dish.id) : false} />) : <p className="p-5 text-sm text-muted">Không có món trong bữa này.</p>}
       </div>
     </article>
   );

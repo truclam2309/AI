@@ -113,7 +113,7 @@ def test_allergies_from_profile_are_filtered_and_inputs_are_not_assumed_availabl
     assert safe["missing_ingredients"] == ["Hành tây"]
 
 
-def test_recommendations_api_is_authenticated_and_returns_typed_payload(monkeypatch):
+def test_recommendations_api_allows_guests_and_returns_typed_payload(monkeypatch):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     profile = UserProfile(user_id=1, allergies_json="[]", avoid_ingredients_json="[]")
@@ -136,8 +136,14 @@ def test_recommendations_api_is_authenticated_and_returns_typed_payload(monkeypa
             session.add(user)
             session.commit()
         client = TestClient(app)
-        denied = client.post("/api/v1/recommendations/by-ingredients", json={"ingredients": ["thịt bò"]})
-        assert denied.status_code == 401
+        guest = client.post("/api/v1/recommendations/by-ingredients", json={"ingredients": ["thịt bò"]})
+        assert guest.status_code == 200
+        assert guest.json()["total"] == 1
+        trial_filter = client.post("/api/v1/recommendations/by-ingredients", json={
+            "ingredients": ["thịt bò"], "avoid_ingredients": ["thịt bò"],
+        })
+        assert trial_filter.status_code == 200
+        assert trial_filter.json()["total"] == 0
         token = create_access_token(1)
         headers = {"Authorization": f"Bearer {token}"}
         invalid = client.post("/api/v1/recommendations/by-ingredients", json={"ingredients": [" "]}, headers=headers)

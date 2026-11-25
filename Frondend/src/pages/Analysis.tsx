@@ -3,12 +3,14 @@ import { ActivityIcon, ArrowRightIcon, BookOpenIcon, CalendarClockIcon, Droplets
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { nutritionApi } from '../api/nutritionApi';
+import { mealPlanApi } from '../api/mealPlanApi';
 import { toApiError } from '../api/errors';
 import { LoadingState } from '../components/LoadingState';
 import { useAuth } from '../contexts/AuthContext';
 import { ActivityLevel, NutritionCalculation, NutritionGoal, NutritionHistoryItem, ProfileUpdate, UserProfile } from '../types/nutrition';
 import { userApi } from '../api/userApi';
 import { fmt } from '../utils/format';
+import { clearGuestDishSelection, getGuestDishSelection } from '../utils/guestExperience';
 
 type Form = {full_name: string; date_of_birth: string; height_cm: string; weight_kg: string; sex_for_calculation: 'male' | 'female'; activity_level: ActivityLevel; goal: NutritionGoal};
 const activityOptions: {value: ActivityLevel; label: string}[] = [
@@ -38,10 +40,21 @@ function payloadFromForm(form: Form): ProfileUpdate {
     activity_level: form.activity_level, goal: form.goal};
 }
 
+function readGuestProfile(): ProfileUpdate | null {
+  try { return (JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {profile?: ProfileUpdate}).profile ?? null; }
+  catch { return null; }
+}
+
 export function Analysis() {
-  const { user, refreshUser } = useAuth();
+  const { user, isGuest, refreshUser } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState<Form>(emptyForm);
+  const [form, setForm] = useState<Form>(() => {
+    if (!isGuest) return emptyForm;
+    try {
+      const profile = (JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {profile?: ProfileUpdate}).profile;
+      return profile ? formFromProfile(profile) : emptyForm;
+    } catch { return emptyForm; }
+  });
   const [result, setResult] = useState<NutritionCalculation | null>(null);
   const [history, setHistory] = useState<NutritionHistoryItem[]>([]);
   const [split, setSplit] = useState(splitDefaults);
@@ -51,22 +64,23 @@ export function Analysis() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setForm(formFromProfile(user?.profile));
+    if (user) setForm(formFromProfile(user.profile));
   }, [user?.profile]);
 
   useEffect(() => {
     let active = true;
-    nutritionApi.history().then((items) => { if (active) setHistory(items); }).catch(() => undefined);
-    if (!user?.profile?.date_of_birth || !user.profile.height_cm || !user.profile.weight_kg ||
-        !user.profile.sex_for_calculation || !user.profile.activity_level || !user.profile.goal) {
+    if (user) nutritionApi.history().then((items) => { if (active) setHistory(items); }).catch(() => undefined);
+    const profile = user?.profile ? payloadFromForm(formFromProfile(user.profile)) : isGuest ? readGuestProfile() : null;
+    if (!profile?.date_of_birth || !profile.height_cm || !profile.weight_kg ||
+        !profile.sex_for_calculation || !profile.activity_level || !profile.goal) {
       setLoading(false);
       return () => { active = false; };
     }
-    nutritionApi.calculate().then((value) => { if (active) setResult(value); })
+    (isGuest ? nutritionApi.calculatePreview(profile) : nutritionApi.calculate()).then((value) => { if (active) setResult(value); })
       .catch((cause) => { if (active) setError(toApiError(cause).message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [user?.profile]);
+  }, [user?.profile, isGuest]);
 
   const macroShares = useMemo(() => {
     if (!result?.target_calories) return {protein: 0, carb: 0, fat: 0};
@@ -79,7 +93,15 @@ export function Analysis() {
   const recalculate = async (event?: FormEvent) => {
     event?.preventDefault();
     setCalculating(true); setError('');
-    try { setResult(await nutritionApi.calculate(payloadFromForm(form))); }
+    try {
+      const payload = isGuest ? {...readGuestProfile(), ...payloadFromForm(form)} : payloadFromForm(form);
+      const value = isGuest ? await nutritionApi.calculatePreview(payload) : await nutritionApi.calculate(payload);
+      setResult(value);
+      if (isGuest) {
+        const previous = JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}');
+        sessionStorage.setItem('nutriai.guest-trial', JSON.stringify({...previous, profile: payload}));
+      }
+    }
     catch (cause) { setError(toApiError(cause).message); }
     finally { setCalculating(false); }
   };
@@ -97,9 +119,52 @@ export function Analysis() {
     finally { setSaving(false); }
   };
 
+  const saveGuestProfile = () => {
+    setError('');
+    const profile = {...readGuestProfile(), ...payloadFromForm(form)};
+    if (!profile.date_of_birth || !profile.height_cm || !profile.weight_kg || !profile.sex_for_calculation || !profile.activity_level || !profile.goal) {
+      setError('Hãy nhập đủ ngày sinh, chiều cao, cân nặng và thông tin hồ sơ trước khi lưu.');
+      return;
+    }
+    try {
+      const previous = JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}');
+      sessionStorage.setItem('nutriai.guest-trial', JSON.stringify({...previous, profile}));
+      toast.success('Đã lưu hồ sơ thử trong phiên này. Hồ sơ không được lưu vào tài khoản.');
+    } catch {
+      setError('Không thể lưu tạm hồ sơ trên thiết bị này.');
+    }
+  };
+
   const createMealPlan = async () => {
     setSaving(true); setError('');
     try {
+      if (isGuest) {
+        const profile = {...readGuestProfile(), ...payloadFromForm(form)};
+        if (!profile.date_of_birth || !profile.height_cm || !profile.weight_kg || !profile.sex_for_calculation || !profile.activity_level || !profile.goal) {
+          setError('Hãy hoàn thiện ngày sinh, chiều cao, cân nặng và các thông tin hồ sơ để tính thực đơn thử.');
+          return;
+        }
+        if (!result) setResult(await nutritionApi.calculatePreview(profile));
+        const selection = getGuestDishSelection();
+        const preview = await mealPlanApi.previewGuest(profile, {
+          meal_split: {breakfast: split.breakfast / 100, lunch: split.lunch / 100, dinner: split.dinner / 100},
+          ...(selection?.plan_date ? {plan_date: selection.plan_date} : {}),
+          ...(selection ? {selected_dish_id: selection.dish_id, selected_meal_type: selection.meal_type} : {}),
+          ...(selection?.meal_type === 'snack' ? {side_meals: 1} : {}),
+        });
+        clearGuestDishSelection();
+        const previous = JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {plans?: import('../types/nutrition').DailyMealPlan[]; plan?: import('../types/nutrition').DailyMealPlan};
+        const versions = previous.plans ?? (previous.plan ? [previous.plan] : []);
+        const nextId = Date.now();
+        const planDate = selection?.plan_date ?? preview.plan_date;
+        const dateVersions = versions.filter((item) => item.plan_date === planDate);
+        const temporaryPlan = {...preview, ...(planDate ? {plan_date: planDate} : {}), id: nextId, version: dateVersions.reduce((max, item) => Math.max(max, item.version), 0) + 1,
+          meals: preview.meals.map((meal, index) => ({...meal, id: nextId * 100 + index}))};
+        const updatedPlans = [...versions.filter((item) => item.id !== temporaryPlan.id), temporaryPlan];
+        sessionStorage.setItem('nutriai.guest-trial', JSON.stringify({...previous, profile, plan: temporaryPlan, plans: updatedPlans}));
+        navigate(`/meal-plan${planDate ? `?date=${encodeURIComponent(planDate)}` : ''}`);
+        return;
+      }
       await userApi.updateProfile(payloadFromForm(form));
       await refreshUser();
       navigate('/meal-plan', {state: {meal_split: {breakfast: split.breakfast / 100, lunch: split.lunch / 100, dinner: split.dinner / 100}}});
@@ -117,8 +182,8 @@ export function Analysis() {
   return <div className="space-y-7">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div><p className="text-sm font-medium text-brand">Nutrition Engine</p><h1 className="mt-1 text-3xl font-semibold">Nhu cầu dinh dưỡng cá nhân</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">Phân tích thể trạng và tính toán nhu cầu phù hợp với hồ sơ, mức vận động và mục tiêu của bạn.</p></div>
-      <button type="button" onClick={createMealPlan} disabled={saving || !result || splitTotal !== 100} title={splitTotal !== 100 ? 'Tỷ lệ ba bữa cần bằng 100%.' : undefined} className="btn-primary h-11">{saving ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : null}Tạo thực đơn <ArrowRightIcon className="h-4 w-4" /></button>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{isGuest ? 'Dùng hồ sơ thử để tính toán các chỉ số và tạo thực đơn; không lưu lịch sử.' : 'Phân tích thể trạng và tính toán nhu cầu phù hợp với hồ sơ, mức vận động và mục tiêu của bạn.'}</p></div>
+      {(!isGuest || Boolean(readGuestProfile() || (form.date_of_birth && form.height_cm && form.weight_kg))) && <button type="button" onClick={createMealPlan} disabled={saving || (!isGuest && !result) || splitTotal !== 100} title={splitTotal !== 100 ? 'Tỷ lệ ba bữa cần bằng 100%.' : undefined} className="btn-primary h-11">{saving ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : null}{isGuest ? 'Tính và xem thực đơn' : 'Tạo thực đơn'} <ArrowRightIcon className="h-4 w-4" /></button>}
     </header>
 
     <form onSubmit={recalculate} className="card space-y-5 p-5 sm:p-6">
@@ -135,19 +200,21 @@ export function Analysis() {
       </div>
       <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center">
         <button type="submit" className="btn-secondary h-11" disabled={calculating}>{calculating ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : <RotateCwIcon className="h-4 w-4" />}Tính toán lại</button>
-        <button type="button" className="btn-primary h-11" disabled={saving || calculating} onClick={saveResult}>{saving ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : <SaveIcon className="h-4 w-4" />}Lưu hồ sơ & kết quả</button>
-        <details className="relative sm:ml-auto"><summary className="btn-ghost h-11 cursor-pointer list-none"><BookOpenIcon className="h-4 w-4" />Xem lịch sử ({history.length})</summary>
+        {isGuest && <button type="button" className="btn-primary h-11" disabled={saving || calculating} onClick={saveGuestProfile}><SaveIcon className="h-4 w-4" />Lưu hồ sơ thử</button>}
+        {!isGuest && <button type="button" className="btn-primary h-11" disabled={saving || calculating} onClick={saveResult}>{saving ? <LoaderCircleIcon className="h-4 w-4 animate-spin" /> : <SaveIcon className="h-4 w-4" />}Lưu hồ sơ & kết quả</button>}
+        {isGuest ? <p className="text-xs text-muted">Chế độ khách: thông tin và phép tính chỉ tồn tại tạm trong phiên này.</p> : <details className="relative sm:ml-auto"><summary className="btn-ghost h-11 cursor-pointer list-none"><BookOpenIcon className="h-4 w-4" />Xem lịch sử ({history.length})</summary>
           <div className="absolute right-0 z-20 mt-2 max-h-72 w-[min(22rem,calc(100vw-2rem))] overflow-auto rounded-xl border border-line bg-white p-2 shadow-xl">
             {history.length ? history.map((item) => <button type="button" key={item.id} onClick={() => setResult(item)} className="flex w-full items-center justify-between gap-3 rounded-lg p-3 text-left hover:bg-surface"><span><span className="block text-sm font-medium">{fmt(item.target_calories)} kcal/ngày</span><span className="text-xs text-muted">{new Date(item.calculated_at).toLocaleString('vi-VN')}</span></span><span className="text-xs text-brand">Xem</span></button>) : <p className="p-3 text-sm text-muted">Chưa lưu lần tính nào.</p>}
           </div>
-        </details>
+        </details>}
       </div>
       {error && <p role="alert" className="rounded-lg bg-accent-soft p-3 text-sm text-accent">{error}</p>}
     </form>
 
     {!result ? <section className="card p-8 text-center"><HeartPulseIcon className="mx-auto h-8 w-8 text-brand" /><h2 className="mt-3 text-lg font-semibold">Hoàn thiện hồ sơ để bắt đầu</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted">Nhập ngày sinh, chiều cao, cân nặng, giới tính, mức vận động và mục tiêu ở trên. Kết quả sẽ được tính từ thông tin cá nhân của bạn.</p></section> : <>
+      {isGuest && <section className="card p-5"><h2 className="font-semibold">Dữ liệu hồ sơ thử</h2><p className="mt-1 text-sm text-muted">Bạn có thể cập nhật hồ sơ đầy đủ hơn, gồm dị ứng, nguyên liệu tránh và sở thích món ăn. Thông tin chỉ giữ trong phiên này.</p><Link to="/profile" className="mt-3 inline-flex text-sm font-semibold text-brand hover:underline">Mở hồ sơ thử nghiệm →</Link></section>}
       <section>
-        <div className="mb-3 flex items-end justify-between"><div><h2 className="text-xl font-semibold">Phân tích thể trạng</h2><p className="mt-1 text-sm text-muted">Kết quả ước tính theo hồ sơ hiện tại.</p></div><Link to="/profile" className="text-sm font-medium text-brand hover:underline">Hồ sơ đầy đủ</Link></div>
+        <div className="mb-3 flex items-end justify-between"><div><h2 className="text-xl font-semibold">Phân tích thể trạng</h2><p className="mt-1 text-sm text-muted">Kết quả ước tính theo hồ sơ hiện tại.</p></div><Link to="/profile" className="text-sm font-medium text-brand hover:underline">{isGuest ? 'Sửa hồ sơ thử' : 'Hồ sơ đầy đủ'}</Link></div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat icon={<HeartPulseIcon className="h-5 w-5" />} label="BMI" value={fmt(result.bmi, 1)} unit={bmiCategory} hint="Chỉ số sàng lọc, không phải chẩn đoán." />
           <Stat icon={<ActivityIcon className="h-5 w-5" />} label="BMR" value={fmt(result.bmr_kcal)} unit="kcal lúc nghỉ" hint="Năng lượng cơ bản ước tính mỗi ngày." />

@@ -7,11 +7,13 @@ Base URL mặc định: `http://127.0.0.1:8000/api/v1`. Ghi đè bằng `VITE_AP
 | POST | `/auth/register` | `{username?, email?, password}`; trả `access_token` và `user` |
 | POST | `/auth/login` | `{username_or_email, password}`; trả token |
 | GET | `/users/me` | Trả `{data: user}`; profile nằm trong user |
+| POST | `/meal-plans/preview` | Công khai; nhận hồ sơ thử nghiệm và trả thực đơn tạm. Không tạo bản ghi thực đơn hay lịch sử. |
 | PUT | `/users/me/profile` | Cập nhật hồ sơ; trả `{data: profile}` |
 | POST | `/nutrition/calculate` | Tính từ hồ sơ hiện tại hoặc các trường profile gửi trong body; trả BMI, BMR, TDEE, calories, protein/carb/fat và công thức |
+| POST | `/nutrition/calculate-preview` | Công khai; tính cùng chỉ số từ hồ sơ tạm cho chế độ khách, không ghi lịch sử. |
 | POST | `/nutrition/history` | Lưu phép tính dinh dưỡng từ hồ sơ đã lưu |
 | GET | `/nutrition/history` | Trả tối đa 30 phép tính đã lưu gần nhất của người dùng |
-| POST | `/recommendations/by-ingredients` | `{ingredients, limit?, max_calories?, min_protein?, goal?}`; trả kết quả cosine, thành phần khớp/còn thiếu và dinh dưỡng theo khẩu phần |
+| POST | `/recommendations/by-ingredients` | Công khai cho khách; `{ingredients, limit?, max_calories?, min_protein?, goal?}`; trả kết quả cosine, thành phần khớp/còn thiếu và dinh dưỡng theo khẩu phần. Hồ sơ dị ứng/nguyên liệu tránh chỉ áp dụng khi đã đăng nhập. |
 | GET | `/meal-plans?date=YYYY-MM-DD` | Trả `{date, data: [plan versions]}`; từng món có `image_url`, `ingredients`, `instructions`; bỏ ngày để lấy hôm nay |
 | POST | `/meal-plans/generate` | `{plan_date}`; trả `{data: plan, created}` cùng ảnh, nguyên liệu và hướng dẫn món |
 | POST | `/meal-plans/select-dish` | `{plan_date, meal_type, dish_id}`; tạo phiên bản mới có món được chọn ở đúng bữa, không xóa phiên bản cũ |

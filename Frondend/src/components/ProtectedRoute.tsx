@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { LoadingState } from './LoadingState';
 
 export function ProtectedRoute({ children }: {children: React.ReactNode;}) {
-  const { status } = useAuth();
+  const { status, isGuest } = useAuth();
   const location = useLocation();
 
   if (status === 'loading') {
@@ -14,7 +14,7 @@ export function ProtectedRoute({ children }: {children: React.ReactNode;}) {
       </div>);
 
   }
-  if (status === 'anonymous') {
+  if (status === 'anonymous' && !isGuest) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
   return <>{children}</>;

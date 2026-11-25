@@ -1,6 +1,7 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { CalendarDaysIcon, ChefHatIcon, CircleUserRoundIcon, HouseIcon, LayoutDashboardIcon, LeafIcon, LogOutIcon, SearchIcon, SparklesIcon, UserRoundIcon, UtensilsIcon } from 'lucide-react';
+import { Link, NavLink, Outlet } from 'react-router-dom';
+import { CalendarDaysIcon, ChefHatIcon, CircleUserRoundIcon, ClipboardListIcon, HouseIcon, LayoutDashboardIcon, LeafIcon, LogOutIcon, SearchIcon, SparklesIcon, UserRoundIcon, UtensilsIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { Link as RouterLink } from 'react-router-dom';
 
 const navItems = [
 { to: '/', label: 'Tổng quan', short: 'Tổng quan', Icon: LayoutDashboardIcon, end: true },
@@ -8,6 +9,7 @@ const navItems = [
 { to: '/menu', label: 'Menu món ăn', short: 'Menu', Icon: UtensilsIcon, end: false },
 { to: '/roulette', label: 'Vòng quay món ăn', short: 'Vòng quay', Icon: ChefHatIcon, end: false },
 { to: '/meal-plan', label: 'Thực đơn', short: 'Thực đơn', Icon: CalendarDaysIcon, end: false },
+{ to: '/food-log', label: 'Nhật ký dinh dưỡng', short: 'Nhật ký', Icon: ClipboardListIcon, end: false },
 { to: '/profile', label: 'Hồ sơ sức khỏe', short: 'Hồ sơ', Icon: UserRoundIcon, end: false }];
 
 const mobileNavItems = [
@@ -15,13 +17,14 @@ const mobileNavItems = [
   { to: '/menu', label: 'Khám phá', Icon: SearchIcon, end: false },
   { to: '/roulette', label: 'Vòng quay', Icon: ChefHatIcon, end: false },
   { to: '/meal-plan', label: 'Thực đơn', Icon: CalendarDaysIcon, end: false },
+  { to: '/food-log', label: 'Nhật ký', Icon: ClipboardListIcon, end: false },
   { to: '/profile', label: 'Cá nhân', Icon: CircleUserRoundIcon, end: false },
 ];
 
 
 export function AppLayout() {
-  const { user, logout } = useAuth();
-  const displayName = user?.username ?? user?.email ?? 'Tài khoản';
+  const { user, status, logout } = useAuth();
+  const displayName = user?.username ?? user?.email ?? 'Khách trải nghiệm';
 
   return (
     <div className="min-h-screen w-full bg-canvas lg:flex">
@@ -33,7 +36,7 @@ export function AppLayout() {
         </div>
         <nav aria-label="Điều hướng chính" className="flex-1 space-y-1 px-3">
           {navItems.map(({ to, label, Icon, end }) =>
-          <NavLink
+          (status === 'anonymous' && to === '/profile' ? <RouterLink key={to} to="/analysis" className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted transition-colors hover:bg-canvas hover:text-ink"><Icon className="h-[18px] w-[18px]" aria-hidden="true" />Hồ sơ thử nghiệm</RouterLink> : status === 'anonymous' && to === '/food-log' ? <RouterLink key={to} to="/login" state={{from: to}} className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted transition-colors hover:bg-canvas hover:text-ink"><Icon className="h-[18px] w-[18px]" aria-hidden="true" />{label} · cần đăng nhập</RouterLink> : <NavLink
             key={to}
             to={to}
             end={end}
@@ -45,10 +48,9 @@ export function AppLayout() {
             
               <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
               {label}
-            </NavLink>
-          )}
+          </NavLink>))}
         </nav>
-        <div className="space-y-3 border-t border-line p-4">
+        {status === 'anonymous' ? <div className="space-y-3 border-t border-line p-4"><p className="text-xs leading-5 text-muted">Bạn đang trải nghiệm MyFit với quyền khách.</p><Link to="/register" className="btn-primary h-10 w-full">Đăng ký miễn phí</Link><Link to="/login" className="block text-center text-sm text-brand hover:underline">Đã có tài khoản? Đăng nhập</Link></div> : <div className="space-y-3 border-t border-line p-4">
           <div className="flex items-center gap-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand text-sm font-semibold text-white">
               {displayName.charAt(0).toUpperCase()}
@@ -61,7 +63,7 @@ export function AppLayout() {
               <LogOutIcon className="h-4 w-4" />
             </button>
           </div>
-        </div>
+        </div>}
       </aside>
 
       {/* Mobile header */}
@@ -71,12 +73,12 @@ export function AppLayout() {
             <LeafIcon className="h-5 w-5" aria-hidden="true" />
             <span className="leading-tight">MyFit<span className="block text-[9px] font-medium text-muted">Ăn khỏe dáng xinh</span></span>
           </div>
-          <button type="button" onClick={logout} className="btn-ghost h-10 gap-1.5 px-3" aria-label="Đăng xuất">
+          {status === 'anonymous' ? <div className="flex items-center gap-2"><Link to="/login" className="text-xs font-medium text-brand">Đăng nhập</Link><Link to="/register" className="btn-primary h-9 px-3 text-xs">Đăng ký</Link></div> : <button type="button" onClick={logout} className="btn-ghost h-10 gap-1.5 px-3" aria-label="Đăng xuất">
             <span className="grid h-7 w-7 place-items-center rounded-full bg-brand text-xs font-semibold text-white">
               {displayName.charAt(0).toUpperCase()}
             </span>
             <LogOutIcon className="h-4 w-4" />
-          </button>
+          </button>}
         </div>
       </header>
 
@@ -89,10 +91,10 @@ export function AppLayout() {
         aria-label="Điều hướng chính"
         className="fixed inset-x-3 bottom-2 z-30 rounded-full border border-[#1F5136] bg-[#1F5136]/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_10px_35px_rgba(53,39,31,0.28)] backdrop-blur lg:hidden">
         
-        <ul className="grid grid-cols-5">
+        <ul className="grid grid-cols-6">
           {mobileNavItems.map(({ to, label, Icon, end }) =>
           <li key={to}>
-              <NavLink
+              {status === 'anonymous' && to === '/profile' ? <Link key={to} to="/analysis" className="flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium text-[#F8E6DA] sm:h-16 sm:text-[11px]"><span className="grid h-7 w-12 place-items-center"><Icon className="h-5 w-5" aria-hidden="true" /></span><span className="whitespace-nowrap">Hồ sơ thử</span></Link> : status === 'anonymous' && to === '/food-log' ? <Link key={to} to="/login" state={{from: to}} className="flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium text-[#F8E6DA] sm:h-16 sm:text-[11px]"><span className="grid h-7 w-12 place-items-center"><Icon className="h-5 w-5" aria-hidden="true" /></span><span className="whitespace-nowrap">Đăng nhập</span></Link> : <NavLink
               to={to}
               end={end}
               className={({ isActive }) =>
@@ -109,7 +111,7 @@ export function AppLayout() {
                     <span className="whitespace-nowrap">{label}</span>
                   </>
               }
-              </NavLink>
+              </NavLink>}
             </li>
           )}
         </ul>

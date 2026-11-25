@@ -14,7 +14,7 @@ from .config import settings
 # SQLAlchemy: metadata tạo bảng, session kết nối DB, engine và migration bổ sung cột.
 from .database import Base, SessionLocal, engine, migrate_recipe_columns
 # Các router định nghĩa endpoint theo từng nhóm chức năng của API.
-from .routers import auth, meal_plans, nutrition, recommendations, system, users
+from .routers import auth, meal_plans, nutrition, recommendations, system, users, weight_progress
 # Bộ tìm món theo nguyên liệu và service tạo/lưu thực đơn.
 from .services.ingredient_recommender import IngredientRecommender
 from .services.meal_plans import create_meal_plan as _create_plan
@@ -50,6 +50,7 @@ app.include_router(users.router)
 app.include_router(nutrition.router)
 app.include_router(meal_plans.router)
 app.include_router(recommendations.router)
+app.include_router(weight_progress.router)
 
 
 def initialize_app() -> None:

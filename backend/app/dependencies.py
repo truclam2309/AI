@@ -20,3 +20,16 @@ def current_user(
     if user is None:
         raise HTTPException(401, "Tài khoản không tồn tại.")
     return user
+
+
+def optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> User | None:
+    if credentials is None:
+        return None
+    user_id = decode_access_token(credentials.credentials)
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(401, "Tài khoản không tồn tại.")
+    return user

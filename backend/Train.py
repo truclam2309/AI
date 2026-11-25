@@ -3,6 +3,8 @@
 
 Run ``python Train.py`` to inspect the grouped split without writing files, or
 ``python Train.py --train`` to retrain the model and export audited labels.
+Use ``python Train.py --evaluate-file path/to/test.xlsx`` to evaluate against
+independently reviewed labels in a separate workbook.
 
 Goal labels come from the nutrition-band table in the project report. The
 model learns those labels from per-100 g calories, protein, carbohydrate, fat.
@@ -18,7 +20,7 @@ from pathlib import Path
 import joblib
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import GroupShuffleSplit
 
 
@@ -26,7 +28,11 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_FILE = ROOT_DIR / "du-lieu-train.xlsx"
 MODEL_FILE = ROOT_DIR / "backend" / "models" / "mo_hinh_dinh_duong.pkl"
 RESULT_FILE = ROOT_DIR / "backend" / "data" / "ket_qua_dan_nhan_AI.xlsx"
+METRICS_FILE = ROOT_DIR / "backend" / "data" / "danh_gia_mo_hinh.xlsx"
+TEST_PREDICTIONS_FILE = ROOT_DIR / "backend" / "data" / "du_doan_282_mau_test.xlsx"
+EXTERNAL_EVALUATION_FILE = ROOT_DIR / "backend" / "data" / "test_mon_an.xlsx"
 SHEET_NAME = "dishes"
+TEST_LABEL_COLUMN = "Nhan_Chuan"
 
 # Keep IDs stable: backend/app/recommender.py maps profile goals to 0..3.
 LABELS = {0: "Giảm cân", 1: "Tăng cân", 2: "Duy trì", 3: "Tăng cơ"}
@@ -126,12 +132,45 @@ def train_model(X: pd.DataFrame, y: pd.Series, data: pd.DataFrame, train_idx: li
     evaluation_model = RandomForestClassifier(**params)
     evaluation_model.fit(X.iloc[train_idx], y.iloc[train_idx])
     predictions = evaluation_model.predict(X.iloc[test_idx])
+    test_result = data.iloc[test_idx].copy()
+    test_result.insert(0, "Nhan_Du_Doan_AI", pd.Series(predictions, index=test_result.index).map(LABELS))
+    test_result.insert(0, "Nhan_Theo_Bang", y.iloc[test_idx].map(LABELS))
+    test_result.insert(0, "Ket_Qua", [
+        "Đúng" if actual == predicted else "Sai"
+        for actual, predicted in zip(y.iloc[test_idx], predictions)
+    ])
+    TEST_PREDICTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    test_result.to_excel(TEST_PREDICTIONS_FILE, index=False, sheet_name="282 mau test")
+    print(f"Đã xuất 282 mẫu test: {TEST_PREDICTIONS_FILE}")
     print(f"Accuracy (test, chia theo tên món): {accuracy_score(y.iloc[test_idx], predictions):.2%}")
+    matrix = confusion_matrix(y.iloc[test_idx], predictions, labels=list(LABELS))
+    matrix_df = pd.DataFrame(
+        matrix,
+        index=[f"Thực tế: {LABELS[label]}" for label in LABELS],
+        columns=[f"Dự đoán: {LABELS[label]}" for label in LABELS],
+    )
+    print("Ma trận nhầm lẫn (hàng = nhãn từ bảng quy tắc, cột = dự đoán):")
+    print(matrix_df.to_string())
     print(classification_report(
         y.iloc[test_idx], predictions, labels=list(LABELS),
         target_names=[LABELS[label] for label in LABELS], zero_division=0,
     ))
-    print("Chỉ số đo mức khớp với nhãn tạo theo bảng quy tắc trong báo cáo.")
+    print("Lưu ý: các chỉ số đo mức khớp với nhãn tạo theo bảng quy tắc trong báo cáo, không phải nhãn thực tế độc lập.")
+
+    report = classification_report(
+        y.iloc[test_idx], predictions, labels=list(LABELS),
+        target_names=[LABELS[label] for label in LABELS], zero_division=0,
+        output_dict=True,
+    )
+    metrics = pd.DataFrame(report).transpose().rename_axis("Lớp").reset_index()
+    metrics.insert(1, "accuracy_tap_test", accuracy_score(y.iloc[test_idx], predictions))
+    matrix_export = matrix_df.copy()
+    matrix_export.insert(0, "Nhãn thực tế", list(LABELS.values()))
+    METRICS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with pd.ExcelWriter(METRICS_FILE, engine="openpyxl") as writer:
+        matrix_export.to_excel(writer, index=False, sheet_name="Ma tran nham lan")
+        metrics.to_excel(writer, index=False, sheet_name="Chi so")
+    print(f"Đã xuất bảng đánh giá: {METRICS_FILE}")
 
     final_model = RandomForestClassifier(**params).fit(X, y)
     result = data.copy()
@@ -151,12 +190,74 @@ def train_model(X: pd.DataFrame, y: pd.Series, data: pd.DataFrame, train_idx: li
     print(f"Đã lưu kết quả nhãn: {RESULT_FILE}")
 
 
+def evaluate_external_file(model_path: Path, test_path: Path) -> None:
+    """Evaluate a saved model using independently assigned ground-truth labels."""
+    if not test_path.is_file():
+        raise FileNotFoundError(
+            f"Không tìm thấy file test: {test_path}\n"
+            f"Tạo Excel có cột {', '.join(FEATURE_COLUMNS)} và {TEST_LABEL_COLUMN}."
+        )
+    if not model_path.is_file():
+        raise FileNotFoundError(f"Chưa có model: {model_path}. Hãy chạy --train trước.")
+
+    test_data = pd.read_excel(test_path)
+    required = {*FEATURE_COLUMNS, TEST_LABEL_COLUMN}
+    missing = sorted(required - set(test_data.columns))
+    if missing:
+        raise ValueError(f"File test thiếu cột: {missing}. Cần có: {sorted(required)}")
+    if test_data.empty:
+        raise ValueError("File test không có dòng dữ liệu.")
+
+    X_test = test_data[FEATURE_COLUMNS].copy()
+    for column in FEATURE_COLUMNS:
+        X_test[column] = pd.to_numeric(X_test[column], errors="coerce")
+    if X_test.isna().any().any() or (X_test < 0).any().any():
+        raise ValueError("Calo/Protein/Carb/Fat trong file test phải là số không âm, không để trống.")
+
+    label_to_id = {name.casefold(): label_id for label_id, name in LABELS.items()}
+    raw_labels = test_data[TEST_LABEL_COLUMN]
+    normalized_labels = raw_labels.map(lambda value: re.sub(r"\s+", " ", str(value).strip()).casefold() if pd.notna(value) else "")
+    unknown = sorted(set(normalized_labels) - set(label_to_id))
+    if "" in set(normalized_labels) or unknown:
+        raise ValueError(f"Nhãn {TEST_LABEL_COLUMN} thiếu hoặc không hợp lệ: {unknown}. Dùng: {list(LABELS.values())}")
+    y_true = normalized_labels.map(label_to_id).astype("int64")
+
+    bundle = joblib.load(model_path)
+    model = bundle["model"] if isinstance(bundle, dict) and "model" in bundle else bundle
+    predictions = model.predict(X_test)
+    matrix = confusion_matrix(y_true, predictions, labels=list(LABELS))
+    matrix_df = pd.DataFrame(
+        matrix,
+        index=[f"Thực tế: {LABELS[label]}" for label in LABELS],
+        columns=[f"Dự đoán: {LABELS[label]}" for label in LABELS],
+    )
+
+    print(f"Đánh giá file test độc lập: {test_path}")
+    print(f"Số mẫu: {len(test_data)}")
+    print(f"Accuracy: {accuracy_score(y_true, predictions):.2%}")
+    print("Ma trận nhầm lẫn (hàng = nhãn chuẩn, cột = dự đoán):")
+    print(matrix_df.to_string())
+    print("Precision / Recall / F1 theo lớp:")
+    print(classification_report(
+        y_true, predictions, labels=list(LABELS),
+        target_names=[LABELS[label] for label in LABELS], zero_division=0,
+    ))
+    print("Lưu ý: kết quả chỉ phản ánh dữ liệu test và độ tin cậy của nhãn chuẩn được cung cấp.")
+
+
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Huấn luyện Random Forest phân nhóm mục tiêu món ăn.")
     parser.add_argument("--train", action="store_true", help="Huấn luyện và ghi model/kết quả.")
+    parser.add_argument(
+        "--evaluate-file", nargs="?", const=str(EXTERNAL_EVALUATION_FILE), metavar="XLSX",
+        help=f"Đánh giá model đã lưu bằng file Excel có nhãn chuẩn (mặc định: {EXTERNAL_EVALUATION_FILE}).",
+    )
     args = parser.parse_args()
+    if args.evaluate_file:
+        evaluate_external_file(MODEL_FILE, Path(args.evaluate_file).resolve())
+        return 0
     X, y, groups, data = load_data()
     train_idx, test_idx = grouped_split(X, y, groups)
     print(f"Dữ liệu: {DATA_FILE} [{SHEET_NAME}]")

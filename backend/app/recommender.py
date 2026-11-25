@@ -70,6 +70,7 @@ def generate_meals(
     target_macros: dict[str, float] | None = None,
     main_meals: int = 3,
     side_meals: int = 0,
+    excluded_dish_ids: set[str] | None = None,
 ) -> tuple[list[dict], list[str]]:
     split = split or settings.meal_split
     if set(split) != set(MEALS) or any(v <= 0 for v in split.values()) or abs(sum(split.values()) - 1.0) > 0.01:
@@ -80,6 +81,14 @@ def generate_meals(
     dislikes = _profile_list(profile, "disliked_dishes_json")
     favorites = _profile_list(profile, "favorite_dishes_json")
     counts = history_counts(db, user_id, plan_date)
+    avoid_repeat_ids = set(excluded_dish_ids or ())
+    if user_id:
+        same_day_rows = db.execute(
+            select(MealPlanItem.dish_id)
+            .join(DailyMealPlan, MealPlanItem.meal_plan_id == DailyMealPlan.id)
+            .where(DailyMealPlan.user_id == user_id, DailyMealPlan.plan_date == plan_date)
+        ).scalars().all()
+        avoid_repeat_ids.update(same_day_rows)
     warnings: list[str] = []
     eligible = []
     excluded = 0
@@ -160,6 +169,7 @@ def generate_meals(
     for _ in range(side_meals):
         slots.append(("snack", "side", (1.0 - main_share) / side_meals if side_meals else 0.0))
     candidate_slots: list[tuple[str, str, float, list[Dish]]] = []
+    repeat_fallback_slots = 0
     for meal, course_type, slot_share in slots:
         if course_type == "side":
             allowed_categories = {"ăn vặt", "nước uống", "sữa"}
@@ -172,15 +182,29 @@ def generate_meals(
             if (dish.meal_category or "").strip().casefold() in allowed_categories
         ]
         if categorized:
-            slot_candidates = categorized
+            fresh = [dish for dish in categorized if dish.id not in avoid_repeat_ids]
+            if fresh:
+                slot_candidates = fresh
+            else:
+                slot_candidates = categorized
+                if avoid_repeat_ids:
+                    repeat_fallback_slots += 1
         else:
             # Keep older datasets usable, but surface that the category label
             # could not be honored for this slot.
-            slot_candidates = eligible
+            fresh = [dish for dish in eligible if dish.id not in avoid_repeat_ids]
+            slot_candidates = fresh or eligible
+            if not fresh and avoid_repeat_ids:
+                repeat_fallback_slots += 1
             warnings.append(
                 f"Không còn món thuộc nhóm phù hợp cho {'bữa phụ' if course_type == 'side' else 'bữa ' + meal}; đã mở rộng sang các nhóm món khác."
             )
         candidate_slots.append((meal, course_type, slot_share, slot_candidates))
+
+    if repeat_fallback_slots:
+        warnings.append(
+            f"Có {repeat_fallback_slots} bữa phải dùng lại nhóm món từ phiên bản trước vì danh sách món phù hợp đã giới hạn."
+        )
 
     if any(not slot_candidates for _, _, _, slot_candidates in candidate_slots):
         raise ValueError("Không có món đủ điều kiện cho một hoặc nhiều bữa.")

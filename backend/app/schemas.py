@@ -58,11 +58,27 @@ class NutritionInput(BaseModel):
     goal: Goal | None = None
 
 
+class WeightLogInput(BaseModel):
+    measured_on: date
+    weight_kg: float = Field(gt=0, le=500)
+    note: str | None = Field(default=None, max_length=300)
+
+
 class GenerateInput(BaseModel):
     plan_date: date | None = None
     meal_split: dict[str, float] | None = None
     main_meals: int = Field(default=3, ge=1, le=9)
     side_meals: int = Field(default=0, ge=0, le=6)
+
+
+class GuestMealPlanPreviewInput(ProfileInput):
+    plan_date: date | None = None
+    meal_split: dict[str, float] | None = None
+    main_meals: int = Field(default=3, ge=1, le=9)
+    side_meals: int = Field(default=0, ge=0, le=6)
+    selected_dish_id: str | None = Field(default=None, min_length=1, max_length=80)
+    selected_meal_type: Literal["breakfast", "lunch", "dinner", "snack"] | None = None
+    excluded_dish_ids: list[str] = Field(default_factory=list, max_length=200)
 
 
 class SelectDishInput(BaseModel):
@@ -85,6 +101,8 @@ class IngredientSearchInput(BaseModel):
     max_calories: float | None = Field(default=None, ge=0, le=10000)
     min_protein: float | None = Field(default=None, ge=0, le=1000)
     goal: Goal | None = None
+    allergies: list[str] = Field(default_factory=list, max_length=50)
+    avoid_ingredients: list[str] = Field(default_factory=list, max_length=100)
 
     @field_validator("ingredients")
     @classmethod

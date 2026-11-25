@@ -1,6 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useState } from 'react';
 import { ImageIcon, LoaderCircleIcon, PlusIcon, SearchIcon, XIcon } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { resolveAssetUrl } from '../api/client';
 import { recommendationApi } from '../api/recommendationApi';
@@ -11,6 +11,7 @@ import { MealType, NutritionGoal } from '../types/nutrition';
 import { IngredientRecommendation, IngredientSearchResponse } from '../types/recommendations';
 import { fmt } from '../utils/format';
 import { todayISO } from '../utils/date';
+import { setGuestDishSelection } from '../utils/guestExperience';
 
 const goals: { value: NutritionGoal; label: string }[] = [
   { value: 'lose_weight', label: 'Giảm cân' },
@@ -24,14 +25,21 @@ function ingredientKey(value: string): string {
 }
 
 export function Recommendations() {
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const navigate = useNavigate();
   const [draft, setDraft] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [ingredients, setIngredients] = useState<string[]>([]);
   const [maxCalories, setMaxCalories] = useState('');
   const [minProtein, setMinProtein] = useState('');
-  const [goal, setGoal] = useState<NutritionGoal | ''>('');
+  const [goal, setGoal] = useState<NutritionGoal | ''>(() => {
+    if (user?.profile?.goal) return user.profile.goal;
+    if (isGuest) {
+      try { return (JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {profile?: {goal?: NutritionGoal}}).profile?.goal ?? ''; }
+      catch { return ''; }
+    }
+    return '';
+  });
   const [mealType, setMealType] = useState<MealType>('lunch');
   const [planDate, setPlanDate] = useState(todayISO());
   const [result, setResult] = useState<IngredientSearchResponse | null>(null);
@@ -56,6 +64,19 @@ export function Recommendations() {
   }, [draft]);
 
   const chooseForMeal = async (dish: IngredientRecommendation) => {
+    if (isGuest) {
+      let trialProfile: {date_of_birth?: string} | undefined;
+      try { trialProfile = (JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {profile?: {date_of_birth?: string}}).profile; }
+      catch { trialProfile = undefined; }
+      setGuestDishSelection({dish_id: dish.dish_id, meal_type: mealType, plan_date: planDate, dish});
+      if (!trialProfile?.date_of_birth) {
+        toast.info('Nhập hồ sơ thử để thêm món vào thực đơn trải nghiệm.');
+        navigate('/analysis', { state: { from: '/recommendations' } });
+        return;
+      }
+      navigate(`/meal-plan?date=${encodeURIComponent(planDate)}`, { state: { from: '/recommendations' } });
+      return;
+    }
     setSavingDishId(dish.dish_id);
     try {
       const saved = await mealPlanApi.selectDish({ plan_date: planDate, meal_type: mealType, dish_id: dish.dish_id });
@@ -110,12 +131,20 @@ export function Recommendations() {
     setError('');
     setResult(null);
     try {
+      let trialProfile: {allergies?: string[]; avoid_ingredients?: string[]} | undefined;
+      if (isGuest) {
+        try { trialProfile = (JSON.parse(sessionStorage.getItem('nutriai.guest-trial') ?? '{}') as {profile?: {allergies?: string[]; avoid_ingredients?: string[]}}).profile; }
+        catch { trialProfile = undefined; }
+      }
+      const recommendationLimit = isGuest ? 5 : 12;
       setResult(await recommendationApi.byIngredients({
         ingredients,
-        limit: 12,
+        limit: recommendationLimit,
         ...(maxCalories ? { max_calories: Number(maxCalories) } : {}),
         ...(minProtein ? { min_protein: Number(minProtein) } : {}),
-        ...(goal ? { goal } : {})
+        ...(goal ? { goal } : {}),
+        ...(trialProfile?.allergies ? {allergies: trialProfile.allergies} : {}),
+        ...(trialProfile?.avoid_ingredients ? {avoid_ingredients: trialProfile.avoid_ingredients} : {}),
       }));
     } catch (cause) {
       setError(toApiError(cause).message);
@@ -130,6 +159,7 @@ export function Recommendations() {
         <p className="text-sm text-muted">Tìm kiếm theo nguyên liệu</p>
         <h1 className="mt-1 text-3xl font-semibold">Nấu món gì hôm nay?</h1>
       </header>
+      {isGuest && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#F8E6DA] bg-[#FFFFFF] p-4 text-sm"><span>Chế độ khách: kết quả và hồ sơ thử chỉ dùng tạm trong phiên này.</span><Link to="/meal-plan" className="font-semibold text-brand hover:underline">Mở thực đơn thử →</Link></div>}
 
       <form onSubmit={search} className="card space-y-5 p-5 sm:p-7">
         <div>
@@ -214,16 +244,17 @@ export function Recommendations() {
       </section>}
       {!loading && result && result.results.length > 0 && <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <div><h2 className="text-xl font-semibold">Món có thể tham khảo</h2><p className="mt-1 text-sm text-muted">Tìm thấy {result.total} món · đang hiển thị {result.results.length} kết quả, xếp theo độ tương đồng và tỷ lệ nguyên liệu khớp.</p></div>
+          <div><h2 className="text-xl font-semibold">Món có thể tham khảo</h2><p className="mt-1 text-sm text-muted">Tìm thấy {isGuest ? Math.min(result.total, 5) : result.total} món · đang hiển thị {result.results.length} kết quả, xếp theo độ tương đồng và tỷ lệ nguyên liệu khớp.{isGuest && ' Bản dùng thử giới hạn 5 gợi ý mỗi lần tìm.'}</p></div>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           {result.results.map((dish) => <RecommendationCard key={dish.dish_id} dish={dish} mealType={mealType}
             saving={savingDishId === dish.dish_id} busy={savingDishId !== null} onChoose={() => chooseForMeal(dish)} onOpen={() => setSelectedDish(dish)} />)}
         </div>
+        {isGuest && result.total > result.results.length && <div className="rounded-2xl border border-[#F8E6DA] bg-white p-4 text-center text-sm"><p>Đăng nhập để xem thêm gợi ý phù hợp.</p><Link to="/login" className="mt-1 inline-block font-semibold text-brand hover:underline">Đăng nhập →</Link></div>}
         <div className="space-y-2">{result.warnings.map((warning) => <p key={warning} className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">{warning}</p>)}</div>
       </section>}
       {!result && !loading && !error && <section className="card p-6 text-sm leading-6 text-muted">
-        Nhập những nguyên liệu bạn có để bắt đầu. Dị ứng và nguyên liệu cần tránh trong hồ sơ sẽ tự động được loại khỏi kết quả khi xác định được từ công thức.
+        Nhập những nguyên liệu bạn có để bắt đầu. {user || isGuest ? 'Dị ứng và nguyên liệu cần tránh trong hồ sơ hiện tại sẽ được dùng để lọc kết quả khi xác định được từ công thức.' : 'Hồ sơ thử nghiệm có thể được dùng để lọc dị ứng và nguyên liệu cần tránh.'}
       </section>}
       {selectedDish && <RecommendationDetails dish={selectedDish} onClose={() => setSelectedDish(null)} />}
     </div>

@@ -9,6 +9,8 @@ type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 interface AuthContextValue {
   user: User | null;
   status: AuthStatus;
+  isGuest: boolean;
+  enterGuest: () => void;
   login: (payload: LoginRequest) => Promise<void>;
   register: (payload: RegisterRequest) => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -19,6 +21,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isGuest, setIsGuest] = useState(() => sessionStorage.getItem('nutriai.guest-session') === 'true');
   const [status, setStatus] = useState<AuthStatus>(tokenStore.get() ? 'loading' : 'anonymous');
 
   const refreshUser = useCallback(async () => {
@@ -52,6 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (payload: LoginRequest) => {
     const response = await authApi.login(payload);
     tokenStore.set(response.access_token);
+    sessionStorage.removeItem('nutriai.guest-session');
+    setIsGuest(false);
     try {
       await refreshUser();
     } catch (error) {
@@ -65,6 +70,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (payload: RegisterRequest) => {
     const response = await authApi.register(payload);
     tokenStore.set(response.access_token);
+    sessionStorage.removeItem('nutriai.guest-session');
+    setIsGuest(false);
     setUser(response.user);
     setStatus('authenticated');
   }, []);
@@ -73,11 +80,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     tokenStore.clear();
     setUser(null);
     setStatus('anonymous');
+    setIsGuest(false);
+    sessionStorage.removeItem('nutriai.guest-session');
+  }, []);
+
+  const enterGuest = useCallback(() => {
+    tokenStore.clear();
+    setUser(null);
+    setStatus('anonymous');
+    setIsGuest(true);
+    Object.keys(sessionStorage).filter((key) => key.startsWith('nutriai.food-roulette') || key === 'nutriai.guest-trial' || key === 'nutriai.guest-selected-dish').forEach((key) => sessionStorage.removeItem(key));
+    sessionStorage.setItem('nutriai.guest-session', 'true');
   }, []);
 
   const value = useMemo(
-    () => ({ user, status, login, register, refreshUser, logout }),
-    [user, status, login, register, refreshUser, logout]
+    () => ({ user, status, isGuest, enterGuest, login, register, refreshUser, logout }),
+    [user, status, isGuest, enterGuest, login, register, refreshUser, logout]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

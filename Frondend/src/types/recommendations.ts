@@ -6,6 +6,8 @@ export interface IngredientSearchRequest {
   max_calories?: number;
   min_protein?: number;
   goal?: NutritionGoal;
+  allergies?: string[];
+  avoid_ingredients?: string[];
 }
 
 export interface IngredientRecommendation {
